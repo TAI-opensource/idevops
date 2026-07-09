@@ -123,3 +123,26 @@ jobs:
       - name: Run audit
         run: npm audit --audit-level=high
         continue-on-error: true
+
+  ci-status:
+    name: CI Status
+    runs-on: ubuntu-latest
+    needs: [lint, type-check, build, test, security]
+    if: always()
+    steps:
+      - name: Check all jobs
+        run: |
+          echo "Lint: ${{ needs.lint.result }}"
+          echo "Type Check: ${{ needs.type-check.result }}"
+          echo "Build: ${{ needs.build.result }}"
+          echo "Test: ${{ needs.test.result }}"
+          echo "Security: ${{ needs.security.result }}"
+
+          if [ "${{ needs.lint.result }}" != "success" ] || \
+             [ "${{ needs.type-check.result }}" != "success" ] || \
+             [ "${{ needs.build.result }}" != "success" ]; then
+            echo "One or more required jobs failed"
+            exit 1
+          fi
+
+          echo "All required jobs passed!"

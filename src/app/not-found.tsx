@@ -27,17 +27,13 @@ export default function NotFound() {
           </div>
         </CardContent>
         <CardFooter className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/">
-              <Home className="mr-2 h-4 w-4" />
-              Início
-            </Link>
+          <Button variant="outline" render={<Link href="/" />}>
+            <Home className="mr-2 h-4 w-4" />
+            Início
           </Button>
-          <Button asChild>
-            <Link href="javascript:history.back()">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar
-            </Link>
+          <Button render={<Link href="javascript:history.back()" />}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Voltar
           </Button>
         </CardFooter>
       </Card>

@@ -21,7 +21,9 @@ export default withSentryConfig(nextConfig, {
 
   tunnelRoute: "/monitoring",
 
-  hideSourceMaps: true,
+  sourcemaps: {
+    disable: true,
+  },
 
   disableLogger: true,
 

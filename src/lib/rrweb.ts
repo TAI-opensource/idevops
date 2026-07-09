@@ -12,7 +12,6 @@ const config: recordOptions<eventWithTime> = {
     events.push(event);
   },
   maskAllInputs: true,
-  maskAllText: true,
   blockClass: "rr-block",
   slimDOMOptions: {
     script: true,
@@ -23,7 +22,8 @@ const config: recordOptions<eventWithTime> = {
 export function startRecording() {
   if (typeof window === "undefined") return;
 
-  stopFn = record(config);
+  const handler = record(config);
+  stopFn = handler ?? null;
   return stopFn;
 }
 

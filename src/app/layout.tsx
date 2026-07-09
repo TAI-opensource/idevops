@@ -31,7 +31,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="flex min-h-full flex-col">
-        <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
+        <TooltipProvider delay={0}>{children}</TooltipProvider>
         <Toaster richColors position="top-right" />
       </body>
     </html>
