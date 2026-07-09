@@ -20,29 +20,10 @@ updates:
         update-types:
           - "minor"
           - "patch"
-
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "daily"
-      time: "09:00"
-      timezone: "America/Sao_Paulo"
-    open-pull-requests-limit: 10
-    labels:
-      - "dependencies"
-      - "security"
-      - "automated"
-    commit-message:
-      prefix: "security"
-    groups:
-      security-updates:
-        patterns: ["*"]
-        update-types:
-          - "patch"
-    # Security-only updates
-    allow:
-      - dependency-type: "direct"
-      - dependency-type: "indirect"
+    # Only allow minor and patch updates (no major version bumps)
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -58,3 +39,7 @@ updates:
       - "automated"
     commit-message:
       prefix: "ci"
+    # Only allow minor and patch updates
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
