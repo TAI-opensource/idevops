@@ -21,6 +21,29 @@ updates:
           - "minor"
           - "patch"
 
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "09:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "security"
+      - "automated"
+    commit-message:
+      prefix: "security"
+    groups:
+      security-updates:
+        patterns: ["*"]
+        update-types:
+          - "patch"
+    # Security-only updates
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
