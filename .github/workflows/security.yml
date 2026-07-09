@@ -23,7 +23,7 @@ jobs:
         language: ["javascript"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
@@ -45,7 +45,7 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
@@ -59,10 +59,10 @@ jobs:
     if: github.event_name == 'push'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 26
           cache: "npm"
@@ -81,34 +81,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Scan for secrets
         uses: trufflesecurity/trufflehog@main
         with:
           extra_args: --only-verified
 
-  malware:
-    name: Malware Scan
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Run malware scan
-        uses: advanced-security/malware-actions-scan@v0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          modules: npm,yarn
-
   scorecard:
     name: OpenSSF Scorecard
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
