@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# sentry
+.sentryclirc
+
+# turbo
+.turbo
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
