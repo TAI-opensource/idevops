@@ -11,138 +11,41 @@ on:
 permissions:
   contents: read
   security-events: write
-  actions: read
 
 jobs:
-  security-scan:
-    name: Security Scan
+  idevops-security:
+    name: iDevOps Security
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: ./actions/checkout
+        uses: actions/checkout@v4
         with:
-          token: ${{ github.token }}
           fetch-depth: 0
 
-      - name: Setup tools
-        shell: bash
-        run: |
-          chmod +x actions/idevops/scripts/*.sh 2>/dev/null || true
-
-      - name: Run universal security scanner
-        shell: bash
-        run: actions/idevops/scripts/security-universal.sh
+      - name: Run iDevOps Security
+        uses: TAI-opensource/idevops/actions/idevops@main
+        with:
+          languages: "auto"
+          security: "true"
+          sast: "true"
+          sca: "true"
+          secrets: "true"
+          lint: "false"
+          quality: "false"
+          dependencies: "true"
+          check-outdated: "true"
+          fail-on: "high"
+          upload-sarif: "true"
         env:
-          FAIL_ON: high
-          LANGUAGES: auto
-          SCAN_CATEGORIES: sast,sca,secrets
-          GITHUB_TOKEN: ${{ github.token }}
-        continue-on-error: true
-
-      - name: Upload SARIF results
-        shell: bash
-        run: actions/idevops/scripts/sarif-upload.sh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          REPORT_DIR: .idevops/reports
-        continue-on-error: true
-
-  vulnerability-check:
-    name: Vulnerability Check
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    steps:
-      - name: Checkout
-        uses: ./actions/checkout
-        with:
-          token: ${{ github.token }}
-
-      - name: Setup Node.js
-        uses: ./actions/setup-node
-        with:
-          node-version: 26
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run dependency audit
-        shell: bash
-        run: actions/idevops/scripts/deps-universal.sh
-        env:
-          FAIL_ON: high
-          LANGUAGES: javascript
-        continue-on-error: true
-
-  dependency-review:
-    name: Dependency Review
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Checkout
-        uses: ./actions/checkout
-        with:
-          token: ${{ github.token }}
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: ./actions/setup-node
-        with:
-          node-version: 26
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Check new dependencies for vulnerabilities
-        shell: bash
-        run: |
-          echo "[iDevOps] Dependency Review for PR"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-          # Get changed files in PR
-          git fetch origin ${{ github.base_ref }} --depth=1
-          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
-
-          echo "Changed files:"
-          echo "$CHANGED_FILES"
-
-          # Check if lock files changed (new dependencies)
-          if echo "$CHANGED_FILES" | grep -q "package-lock.json\|yarn.lock\|pnpm-lock.yaml\|Pipfile.lock\|poetry.lock\|Cargo.lock\|go.sum\|Gemfile.lock\|composer.lock\|packages.lock.json"; then
-            echo ""
-            echo "[iDevOps] Lock file changes detected - running dependency audit"
-            actions/idevops/scripts/deps-universal.sh
-          else
-            echo ""
-            echo "[iDevOps] No lock file changes - skipping dependency review"
-          fi
-        continue-on-error: true
-
-  secret-scanning:
-    name: Secret Scanning
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: ./actions/checkout
-        with:
-          token: ${{ github.token }}
-          fetch-depth: 0
-
-      - name: Run secret scanning
-        shell: bash
-        run: actions/idevops/scripts/secrets-gitleaks.sh
-        env:
-          FAIL_ON: high
-        continue-on-error: true
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
   scorecard:
     name: OpenSSF Scorecard
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: ./actions/checkout
+        uses: actions/checkout@v4
         with:
-          token: ${{ github.token }}
           persist-credentials: false
 
       - name: Run Scorecard
@@ -152,10 +55,13 @@ jobs:
           results_format: sarif
           publish_results: true
 
-      - name: Upload Scorecard SARIF
+      - name: Upload SARIF
         shell: bash
-        run: actions/idevops/scripts/sarif-upload.sh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          SARIF_FILE: results.sarif
-        continue-on-error: true
+        run: |
+          if [ -f results.sarif ]; then
+            curl -s -X POST \
+              -H "Authorization: token ${{ github.token }}" \
+              -H "Accept: application/vnd.github+json" \
+              -d "{\"sarif\": $(cat results.sarif), \"commit_sha\": \"${{ github.sha }}\", \"ref\": \"${{ github.ref }}\", \"validate\": true}" \
+              "https://api.github.com/repos/${{ github.repository }}/code-scanning/sarifs" || true
+          fi

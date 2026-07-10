@@ -8,45 +8,43 @@ on:
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
-  lint:
-    name: Lint & Format
+  idevops:
+    name: iDevOps Pipeline
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: ./actions/checkout
+        uses: actions/checkout@v4
+
+      - name: Run iDevOps
+        uses: TAI-opensource/idevops/actions/idevops@main
         with:
-          token: ${{ github.token }}
+          languages: "auto"
+          security: "true"
+          sast: "true"
+          sca: "true"
+          secrets: "true"
+          lint: "true"
+          quality: "true"
+          dependencies: "true"
+          check-outdated: "true"
+          fail-on: "medium"
+          upload-sarif: "true"
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
-      - name: Setup Node.js
-        uses: ./actions/setup-node
-        with:
-          node-version: 26
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run ESLint
-        run: npm run lint
-
-      - name: Check formatting
-        run: npm run format:check
-
-  validate-action:
+  validate:
     name: Validate Action
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: ./actions/checkout
-        with:
-          token: ${{ github.token }}
+        uses: actions/checkout@v4
 
-      - name: Validate action.yml syntax
+      - name: Validate action.yml
         shell: bash
         run: |
-          # Install yq for YAML validation
           sudo curl -fsSL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64" -o /usr/local/bin/yq
           sudo chmod +x /usr/local/bin/yq
 
@@ -60,59 +58,10 @@ jobs:
             echo "OK: $action_file"
           done
 
-      - name: Check shell scripts syntax
+      - name: Validate scripts syntax
         run: |
           for script in actions/idevops/scripts/*.sh; do
             echo "Checking: $script"
             bash -n "$script" || exit 1
           done
-          echo "All scripts have valid syntax"
-
-      - name: Validate action inputs/outputs
-        shell: bash
-        run: |
-          for action_file in actions/*/action.yml; do
-            echo "Checking structure: $action_file"
-            # Verify required fields exist
-            yq eval '.name' "$action_file" | grep -q "null" && {
-              echo "ERROR: Missing 'name' in $action_file"
-              exit 1
-            }
-            yq eval '.runs' "$action_file" | grep -q "null" && {
-              echo "ERROR: Missing 'runs' in $action_file"
-              exit 1
-            }
-            echo "OK: $action_file"
-          done
-
-  security:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: ./actions/checkout
-        with:
-          token: ${{ github.token }}
-
-      - name: Run audit
-        run: echo "Shell scripts only, no npm audit needed"
-
-  ci-status:
-    name: CI Status
-    runs-on: ubuntu-latest
-    needs: [lint, validate-action, security]
-    if: always()
-    steps:
-      - name: Check all jobs
-        run: |
-          echo "Lint: ${{ needs.lint.result }}"
-          echo "Validate Action: ${{ needs.validate-action.result }}"
-          echo "Security: ${{ needs.security.result }}"
-
-          if [ "${{ needs.lint.result }}" != "success" ] || \
-             [ "${{ needs.validate-action.result }}" != "success" ]; then
-            echo "One or more required jobs failed"
-            exit 1
-          fi
-
-          echo "All required jobs passed!"
+          echo "All scripts valid"
