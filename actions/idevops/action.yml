@@ -78,6 +78,9 @@ inputs:
   report-dir:
     description: "Reports directory"
     default: ".idevops/reports"
+  semgrep-app-token:
+    description: "Semgrep App token for custom rules (pass via env: SEMGREP_APP_TOKEN)"
+    default: ""
 
 outputs:
   summary:
@@ -153,7 +156,7 @@ runs:
       env:
         FAIL_ON: ${{ inputs.fail-on }}
         LANGUAGES: ${{ inputs.languages }}
-        SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        SEMGREP_APP_TOKEN: ${{ inputs.semgrep-app-token }}
       continue-on-error: true
 
     # ─────────────────────────────────────────────
@@ -310,7 +313,19 @@ runs:
       continue-on-error: true
 
     - name: "Lint: R"
-      if: inputs.lint == 'true' && (contains(inputs.languages, ',r,') || inputs.languages == 'auto')
+      if: inputs.lint == 'true' && inputs.languages != 'auto'
+      shell: bash
+      run: |
+        LANGS="${{ inputs.languages }}"
+        if echo ",$LANGS," | grep -q ",r,"; then
+          ${{ github.action_path }}/scripts/lint-r.sh
+        fi
+      env:
+        FAIL_ON: ${{ inputs.fail-on }}
+      continue-on-error: true
+
+    - name: "Lint: R (auto)"
+      if: inputs.lint == 'true' && inputs.languages == 'auto'
       shell: bash
       run: ${{ github.action_path }}/scripts/lint-r.sh
       env:

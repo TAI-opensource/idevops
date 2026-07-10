@@ -36,8 +36,7 @@ jobs:
           check-outdated: "true"
           fail-on: "high"
           upload-sarif: "true"
-        env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+          semgrep-app-token: ${{ secrets.SEMGREP_APP_TOKEN }}
 
   scorecard:
     name: OpenSSF Scorecard
