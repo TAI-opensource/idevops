@@ -14,40 +14,9 @@ permissions:
   actions: read
 
 jobs:
-  codeql:
-    name: CodeQL Analysis
+  security-scan:
+    name: Security Scan
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        language: ["javascript"]
-    steps:
-      - name: Checkout
-        uses: ./actions/checkout
-        with:
-          token: ${{ github.token }}
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: ${{ matrix.language }}
-          queries: +security-and-quality
-        continue-on-error: true
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-        continue-on-error: true
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:${{ matrix.language }}"
-        continue-on-error: true
-
-  dependency-review:
-    name: Dependency Review
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
         uses: ./actions/checkout
@@ -55,11 +24,28 @@ jobs:
           token: ${{ github.token }}
           fetch-depth: 0
 
-      - name: Dependency Review
-        uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: moderate
-          comment-summary-in-pr: always
+      - name: Setup tools
+        shell: bash
+        run: |
+          chmod +x actions/idevops/scripts/*.sh 2>/dev/null || true
+
+      - name: Run universal security scanner
+        shell: bash
+        run: actions/idevops/scripts/security-universal.sh
+        env:
+          FAIL_ON: high
+          LANGUAGES: auto
+          SCAN_CATEGORIES: sast,sca,secrets
+          GITHUB_TOKEN: ${{ github.token }}
+        continue-on-error: true
+
+      - name: Upload SARIF results
+        shell: bash
+        run: actions/idevops/scripts/sarif-upload.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPORT_DIR: .idevops/reports
+        continue-on-error: true
 
   vulnerability-check:
     name: Vulnerability Check
@@ -80,11 +66,57 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run security audit
-        run: npm audit --audit-level=moderate
+      - name: Run dependency audit
+        shell: bash
+        run: actions/idevops/scripts/deps-universal.sh
+        env:
+          FAIL_ON: high
+          LANGUAGES: javascript
+        continue-on-error: true
 
-      - name: Check for outdated dependencies
-        run: npm outdated || true
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: ./actions/checkout
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: ./actions/setup-node
+        with:
+          node-version: 26
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check new dependencies for vulnerabilities
+        shell: bash
+        run: |
+          echo "[iDevOps] Dependency Review for PR"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          # Get changed files in PR
+          git fetch origin ${{ github.base_ref }} --depth=1
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # Check if lock files changed (new dependencies)
+          if echo "$CHANGED_FILES" | grep -q "package-lock.json\|yarn.lock\|pnpm-lock.yaml\|Pipfile.lock\|poetry.lock\|Cargo.lock\|go.sum\|Gemfile.lock\|composer.lock\|packages.lock.json"; then
+            echo ""
+            echo "[iDevOps] Lock file changes detected - running dependency audit"
+            actions/idevops/scripts/deps-universal.sh
+          else
+            echo ""
+            echo "[iDevOps] No lock file changes - skipping dependency review"
+          fi
+        continue-on-error: true
 
   secret-scanning:
     name: Secret Scanning
@@ -96,25 +128,12 @@ jobs:
           token: ${{ github.token }}
           fetch-depth: 0
 
-      - name: Scan for secrets (TruffleHog)
+      - name: Run secret scanning
         shell: bash
-        run: |
-          echo "[Secret Scanning] Running TruffleHog..."
-          docker run --rm \
-            -v "$(pwd):/repo" \
-            -w /repo \
-            trufflesecurity/trufflehog:latest \
-            git file:///repo --only-verified --json > trufflehog-results.json 2>&1 || true
-
-          # Count results
-          FINDINGS=$(jq '.results | length' trufflehog-results.json 2>/dev/null || echo "0")
-          echo "[Secret Scanning] Found $FINDINGS verified secrets"
-          cat trufflehog-results.json | jq '.results[].DetectorName' 2>/dev/null || echo "No findings"
-
-          if [ "$FINDINGS" -gt 0 ]; then
-            echo "[Secret Scanning] WARNING: Verified secrets found!"
-            cat trufflehog-results.json | jq '.' 2>/dev/null
-          fi
+        run: actions/idevops/scripts/secrets-gitleaks.sh
+        env:
+          FAIL_ON: high
+        continue-on-error: true
 
   scorecard:
     name: OpenSSF Scorecard
@@ -133,7 +152,10 @@ jobs:
           results_format: sarif
           publish_results: true
 
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: results.sarif
+      - name: Upload Scorecard SARIF
+        shell: bash
+        run: actions/idevops/scripts/sarif-upload.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SARIF_FILE: results.sarif
+        continue-on-error: true
