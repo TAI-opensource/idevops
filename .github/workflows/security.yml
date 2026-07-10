@@ -24,30 +24,89 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Full history for better secret detection
+          fetch-depth: 0
 
-      - name: Run iDevOps Security
-        uses: TAI-opensource/idevops/actions/idevops@main
-        with:
-          # Language detection
-          languages: "auto"
-          # Security scanning (all enabled)
-          security: "true" # Run security scans (Trivy, OSV-Scanner)
-          sast: "true" # Run Semgrep SAST scans
-          sca: "true" # Run Software Composition Analysis
-          scan-secrets: "true" # Scan for leaked secrets (Gitleaks, TruffleHog)
-          # Code quality (disabled for security-only scan)
-          lint: "false" # Skip linting in security workflow
-          quality: "false" # Skip quality metrics in security workflow
-          # Dependencies
-          dependencies: "true" # Audit dependencies for vulnerabilities
-          check-outdated: "true" # Check for outdated packages
-          # Fail threshold: critical, high, medium, low, never
-          fail-on: "high" # Stricter threshold for security workflow
-          # SARIF upload to GitHub Security tab
-          upload-sarif: "true"
-          # Semgrep App token for custom rules (passed as input, not env)
-          semgrep-app-token: ${{ secrets.SEMGREP_APP_TOKEN }}
+      - name: "iDevOps: Setup"
+        shell: bash
+        run: |
+          chmod +x actions/idevops/scripts/*.sh 2>/dev/null || true
+          mkdir -p .idevops/reports .idevops/cache
+          echo "## iDevOps Security Scan" >> $GITHUB_STEP_SUMMARY
+        env:
+          IDEVOPS_LANGUAGES: "auto"
+          IDEVOPS_SECURITY: "true"
+          IDEVOPS_SAST: "true"
+          IDEVOPS_SCA: "true"
+          IDEVOPS_SECRETS: "true"
+          IDEVOPS_LINT: "false"
+          IDEVOPS_LINT_FIX: "false"
+          IDEVOPS_QUALITY: "false"
+          IDEVOPS_DEPS: "true"
+          IDEVOPS_OUTDATED: "true"
+          IDEVOPS_LICENSES: "false"
+          IDEVOPS_DAST: "false"
+          IDEVOPS_RECON: "false"
+          IDEVOPS_SBOM: "false"
+          IDEVOPS_SBOM_FORMAT: "both"
+          IDEVOPS_FAIL_ON: "high"
+          IDEVOPS_UPLOAD_SARIF: "true"
+          IDEVOPS_REPORT_DIR: ".idevops/reports"
+          IDEVOPS_CONTAINER_IMAGE: ""
+          IDEVOPS_TARGET_URL: ""
+
+      - name: "iDevOps: Security Scan (Universal)"
+        shell: bash
+        run: ./actions/idevops/scripts/security-universal.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Security Scan (Trivy)"
+        shell: bash
+        run: ./actions/idevops/scripts/security-trivy.sh
+        continue-on-error: true
+
+      - name: "iDevOps: SAST (OSV-Scanner)"
+        shell: bash
+        run: ./actions/idevops/scripts/security-osv.sh
+        continue-on-error: true
+
+      - name: "iDevOps: SAST (Semgrep)"
+        shell: bash
+        run: ./actions/idevops/scripts/security-semgrep.sh
+        continue-on-error: true
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+      - name: "iDevOps: Secret Detection (Gitleaks)"
+        shell: bash
+        run: ./actions/idevops/scripts/secrets-gitleaks.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Secret Detection (TruffleHog)"
+        shell: bash
+        run: ./actions/idevops/scripts/secrets-trufflehog.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Dependencies Audit"
+        shell: bash
+        run: ./actions/idevops/scripts/deps-universal.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Dependencies Outdated"
+        shell: bash
+        run: ./actions/idevops/scripts/outdated-checker.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Generate Report"
+        if: always()
+        shell: bash
+        run: ./actions/idevops/scripts/summary.sh
+
+      - name: "iDevOps: Upload SARIF"
+        if: always()
+        shell: bash
+        run: ./actions/idevops/scripts/sarif-upload.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
   # ─────────────────────────────────────────────
   # Job 2: OpenSSF Scorecard analysis

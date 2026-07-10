@@ -21,28 +21,287 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run iDevOps
-        uses: TAI-opensource/idevops/actions/idevops@main
-        with:
-          # Language detection: "auto" detects from repo, or comma-separated list
-          languages: "auto"
-          # Security scanning
-          security: "true" # Run security scans (Trivy, OSV-Scanner)
-          sast: "true" # Run Semgrep SAST scans
-          sca: "true" # Run Software Composition Analysis
-          scan-secrets: "true" # Scan for leaked secrets (Gitleaks, TruffleHog)
-          # Code quality
-          lint: "true" # Run language-specific linters
-          quality: "true" # Run code quality metrics
-          # Dependencies
-          dependencies: "true" # Audit dependencies for vulnerabilities
-          check-outdated: "true" # Check for outdated packages
-          # Fail threshold: critical, high, medium, low, never
-          fail-on: "medium"
-          # SARIF upload to GitHub Security tab
-          upload-sarif: "true"
-          # Semgrep App token for custom rules (passed as input, not env)
-          semgrep-app-token: ${{ secrets.SEMGREP_APP_TOKEN }}
+      - name: "iDevOps: Setup"
+        shell: bash
+        run: |
+          chmod +x actions/idevops/scripts/*.sh 2>/dev/null || true
+          mkdir -p .idevops/reports .idevops/cache
+          echo "## iDevOps Pipeline" >> $GITHUB_STEP_SUMMARY
+        env:
+          IDEVOPS_LANGUAGES: "auto"
+          IDEVOPS_SECURITY: "true"
+          IDEVOPS_SAST: "true"
+          IDEVOPS_SCA: "true"
+          IDEVOPS_SECRETS: "true"
+          IDEVOPS_LINT: "true"
+          IDEVOPS_LINT_FIX: "false"
+          IDEVOPS_QUALITY: "true"
+          IDEVOPS_DEPS: "true"
+          IDEVOPS_OUTDATED: "true"
+          IDEVOPS_LICENSES: "false"
+          IDEVOPS_DAST: "false"
+          IDEVOPS_RECON: "false"
+          IDEVOPS_SBOM: "false"
+          IDEVOPS_SBOM_FORMAT: "both"
+          IDEVOPS_FAIL_ON: "medium"
+          IDEVOPS_UPLOAD_SARIF: "true"
+          IDEVOPS_REPORT_DIR: ".idevops/reports"
+          IDEVOPS_CONTAINER_IMAGE: ""
+          IDEVOPS_TARGET_URL: ""
+
+      - name: "iDevOps: Security Scan (Universal)"
+        shell: bash
+        run: ./actions/idevops/scripts/security-universal.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Security Scan (Trivy)"
+        shell: bash
+        run: ./actions/idevops/scripts/security-trivy.sh
+        continue-on-error: true
+
+      - name: "iDevOps: SAST (OSV-Scanner)"
+        shell: bash
+        run: ./actions/idevops/scripts/security-osv.sh
+        continue-on-error: true
+
+      - name: "iDevOps: SAST (Semgrep)"
+        shell: bash
+        run: ./actions/idevops/scripts/security-semgrep.sh
+        continue-on-error: true
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+      - name: "iDevOps: Secret Detection (Gitleaks)"
+        shell: bash
+        run: ./actions/idevops/scripts/secrets-gitleaks.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Secret Detection (TruffleHog)"
+        shell: bash
+        run: ./actions/idevops/scripts/secrets-trufflehog.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint JavaScript/TypeScript"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-javascript.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Python"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-python.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Rust"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-rust.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Go"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-go.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Java/Kotlin"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-java.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint C/C++"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-c-cpp.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint C#"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-csharp.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Ruby"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-ruby.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint PHP"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-php.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Swift"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-swift.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Scala"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-scala.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Haskell"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-haskell.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Elixir"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-elixir.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Dart"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-dart.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Shell"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-shell.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Lua"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-lua.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Perl"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-perl.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint R"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-r.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Julia"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-julia.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint PowerShell"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-powershell.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint SQL"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-sql.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint GraphQL"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-graphql.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Protobuf"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-protobuf.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint CSS"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-css.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint HTML"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-html.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint YAML"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-yaml.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint JSON"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-json.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Markdown"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-markdown.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Docker"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-docker.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Terraform"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-terraform.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Kubernetes"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-kubernetes.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Helm"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-helm.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Lint Ansible"
+        shell: bash
+        run: ./actions/idevops/scripts/lint-ansible.sh
+        continue-on-error: true
+
+      - name: "iDevOps: IaC Scan"
+        shell: bash
+        run: ./actions/idevops/scripts/iac-scanner.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Container Security"
+        shell: bash
+        run: ./actions/idevops/scripts/container-scanner.sh
+        continue-on-error: true
+
+      - name: "iDevOps: DAST Scan"
+        shell: bash
+        run: ./actions/idevops/scripts/dast-scanner.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Recon Scan"
+        shell: bash
+        run: ./actions/idevops/scripts/recon-scanner.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Dependencies Audit"
+        shell: bash
+        run: ./actions/idevops/scripts/deps-universal.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Dependencies Outdated"
+        shell: bash
+        run: ./actions/idevops/scripts/outdated-checker.sh
+        continue-on-error: true
+
+      - name: "iDevOps: License Compliance"
+        shell: bash
+        run: ./actions/idevops/scripts/license-scanner.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Code Quality"
+        shell: bash
+        run: ./actions/idevops/scripts/quality.sh
+        continue-on-error: true
+
+      - name: "iDevOps: SBOM Generation"
+        shell: bash
+        run: ./actions/idevops/scripts/sbom-generator.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Generate Report"
+        if: always()
+        shell: bash
+        run: ./actions/idevops/scripts/summary.sh
+
+      - name: "iDevOps: Upload SARIF"
+        if: always()
+        shell: bash
+        run: ./actions/idevops/scripts/sarif-upload.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
   # ─────────────────────────────────────────────
   # Job 2: Validate action YAML and scripts
