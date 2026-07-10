@@ -38,15 +38,19 @@ if ! has_py_files; then
   exit 0
 fi
 
-# --- Ruff ---
+# --- Ruff (primary) ---
 log "--- Ruff ---"
-install_if_missing ruff ruff
-if [[ -f "pyproject.toml" ]] || [[ -f "ruff.toml" ]]; then
+if [[ -f "pyproject.toml" ]] || [[ -f ".ruff.toml" ]] || [[ -f "ruff.toml" ]]; then
+  install_if_missing ruff ruff
   ruff check "$TARGET" --output-format json 2>&1 | tee /tmp/ruff-results.json
   check_exit ${PIPESTATUS[0]} "Ruff"
 else
-  ruff check "$TARGET" 2>&1
-  check_exit $? "Ruff"
+  warn "No ruff configuration found. Falling back to flake8."
+  # --- Flake8 (fallback) ---
+  log "--- Flake8 ---"
+  install_if_missing flake8 flake8
+  flake8 "$TARGET" 2>&1
+  check_exit $? "Flake8"
 fi
 
 # --- Pylint ---

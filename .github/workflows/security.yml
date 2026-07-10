@@ -6,8 +6,11 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Weekly scan on Mondays at 06:00 UTC
     - cron: "0 6 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -27,11 +30,13 @@ jobs:
           fetch-depth: 0
 
       - name: "iDevOps: Setup"
+        id: detect
         shell: bash
         run: |
           chmod +x actions/idevops/scripts/*.sh 2>/dev/null || true
           mkdir -p .idevops/reports .idevops/cache
           echo "## iDevOps Security Scan" >> $GITHUB_STEP_SUMMARY
+          bash ./actions/idevops/scripts/detect-project.sh
         env:
           IDEVOPS_LANGUAGES: "auto"
           IDEVOPS_SECURITY: "true"
@@ -86,6 +91,18 @@ jobs:
         run: ./actions/idevops/scripts/secrets-trufflehog.sh
         continue-on-error: true
 
+      - name: "iDevOps: IaC Scan (Checkov)"
+        if: steps.detect.outputs.has_terraform == 'true' || steps.detect.outputs.has_kubernetes == 'true' || steps.detect.outputs.has_helm == 'true' || steps.detect.outputs.has_ansible == 'true'
+        shell: bash
+        run: ./actions/idevops/scripts/iac-checkov.sh
+        continue-on-error: true
+
+      - name: "iDevOps: Container Security (Grype)"
+        if: steps.detect.outputs.has_docker == 'true'
+        shell: bash
+        run: ./actions/idevops/scripts/container-grype.sh
+        continue-on-error: true
+
       - name: "iDevOps: Dependencies Audit"
         shell: bash
         run: ./actions/idevops/scripts/deps-universal.sh
@@ -94,6 +111,11 @@ jobs:
       - name: "iDevOps: Dependencies Outdated"
         shell: bash
         run: ./actions/idevops/scripts/outdated-checker.sh
+        continue-on-error: true
+
+      - name: "iDevOps: SBOM (Syft)"
+        shell: bash
+        run: ./actions/idevops/scripts/sbom-syft.sh
         continue-on-error: true
 
       - name: "iDevOps: Generate Report"
@@ -107,6 +129,14 @@ jobs:
         run: ./actions/idevops/scripts/sarif-upload.sh
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+      - name: "iDevOps: Upload Reports"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: .idevops/reports/
+          retention-days: 30
 
   # ─────────────────────────────────────────────
   # Job 2: OpenSSF Scorecard analysis

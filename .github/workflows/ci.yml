@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, develop]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   security-events: write
@@ -285,21 +289,41 @@ jobs:
         continue-on-error: true
 
       # ── IaC ───────────────────────────────────
-      - name: "iDevOps: IaC Scan"
+      - name: "iDevOps: IaC Scan (Trivy)"
         if: steps.detect.outputs.has_terraform == 'true' || steps.detect.outputs.has_kubernetes == 'true' || steps.detect.outputs.has_helm == 'true' || steps.detect.outputs.has_ansible == 'true'
         shell: bash
         run: ./actions/idevops/scripts/iac-scanner.sh
         continue-on-error: true
 
+      - name: "iDevOps: IaC Scan (Checkov)"
+        if: steps.detect.outputs.has_terraform == 'true' || steps.detect.outputs.has_kubernetes == 'true' || steps.detect.outputs.has_helm == 'true' || steps.detect.outputs.has_ansible == 'true'
+        shell: bash
+        run: ./actions/idevops/scripts/iac-checkov.sh
+        continue-on-error: true
+
       # ── Container ─────────────────────────────
-      - name: "iDevOps: Container Security"
+      - name: "iDevOps: Container Security (Trivy)"
         if: steps.detect.outputs.has_docker == 'true'
         shell: bash
         run: ./actions/idevops/scripts/container-scanner.sh
         continue-on-error: true
 
+      - name: "iDevOps: Container Security (Grype)"
+        if: steps.detect.outputs.has_docker == 'true'
+        shell: bash
+        run: ./actions/idevops/scripts/container-grype.sh
+        continue-on-error: true
+
       # ── DAST ──────────────────────────────────
-      - name: "iDevOps: DAST Scan"
+      - name: "iDevOps: DAST Scan (Nuclei)"
+        if: env.IDEVOPS_TARGET_URL != ''
+        shell: bash
+        run: ./actions/idevops/scripts/dast-nuclei.sh
+        continue-on-error: true
+        env:
+          IDEVOPS_TARGET_URL: ""
+
+      - name: "iDevOps: DAST Scan (ZAP)"
         if: env.IDEVOPS_TARGET_URL != ''
         shell: bash
         run: ./actions/idevops/scripts/dast-scanner.sh
@@ -337,9 +361,15 @@ jobs:
         run: ./actions/idevops/scripts/quality.sh
         continue-on-error: true
 
-      - name: "iDevOps: SBOM Generation"
+      # ── SBOM ──────────────────────────────────
+      - name: "iDevOps: SBOM (Trivy)"
         shell: bash
         run: ./actions/idevops/scripts/sbom-generator.sh
+        continue-on-error: true
+
+      - name: "iDevOps: SBOM (Syft)"
+        shell: bash
+        run: ./actions/idevops/scripts/sbom-syft.sh
         continue-on-error: true
 
       # ── Reporting ─────────────────────────────
@@ -355,8 +385,32 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
+      - name: "iDevOps: Upload Reports"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: idevops-reports
+          path: .idevops/reports/
+          retention-days: 7
+
   # ─────────────────────────────────────────────
-  # Job 2: Validate action YAML and scripts
+  # Job 2: Dependency Review (PR only)
+  # ─────────────────────────────────────────────
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  # ─────────────────────────────────────────────
+  # Job 3: Validate action YAML and scripts
   # ─────────────────────────────────────────────
   validate:
     name: Validate
@@ -390,12 +444,12 @@ jobs:
           echo "All scripts valid"
 
   # ─────────────────────────────────────────────
-  # Job 3: Report overall workflow status
+  # Job 4: Report overall workflow status
   # ─────────────────────────────────────────────
   status:
     name: Status
     if: always()
-    needs: [idevops, validate]
+    needs: [idevops, validate, dependency-review]
     runs-on: ubuntu-latest
     steps:
       - name: Report status
@@ -407,11 +461,16 @@ jobs:
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| iDevOps Pipeline | ${{ needs.idevops.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Validate | ${{ needs.validate.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Review | ${{ needs.dependency-review.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ "${{ needs.idevops.result }}" != "success" ] || [ "${{ needs.validate.result }}" != "success" ]; then
-            echo "One or more jobs failed."
+          if [ "${{ needs.idevops.result }}" != "success" ] && [ "${{ needs.idevops.result }}" != "skipped" ]; then
+            echo "iDevOps pipeline failed."
+            exit 1
+          fi
+          if [ "${{ needs.validate.result }}" != "success" ]; then
+            echo "Validation failed."
             exit 1
           fi
 
-          echo "All jobs passed."
+          echo "All checks passed."

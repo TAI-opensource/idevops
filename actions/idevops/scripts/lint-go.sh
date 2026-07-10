@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# [iDevOps] Lint script for Go using golangci-lint, go vet, staticcheck, and gofmt
+# [iDevOps] Lint script for Go using golangci-lint v2, go vet, staticcheck, and gofmt
 set -euo pipefail
 
 FAIL_ON="${FAIL_ON:-warning}"
@@ -26,17 +26,61 @@ if ! find "$TARGET" -maxdepth 3 -name "*.go" -type f 2>/dev/null | head -1 | gre
   exit 0
 fi
 
-# --- golangci-lint ---
-log "--- golangci-lint ---"
-if ! command -v golangci-lint &>/dev/null; then
-  log "Installing golangci-lint..."
-  curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin 2>/dev/null || true
-fi
-if command -v golangci-lint &>/dev/null; then
-  golangci-lint run --out-format=json "$TARGET" 2>&1 | tee /tmp/golangci-results.json
-  check_exit ${PIPESTATUS[0]} "golangci-lint"
+# --- golangci-lint v2 (primary) ---
+log "--- golangci-lint v2 ---"
+if [[ -f ".golangci.yml" ]] || [[ -f ".golangci.yaml" ]]; then
+  if grep -q 'version: "2"' .golangci.yml 2>/dev/null || grep -q 'version: "2"' .golangci.yaml 2>/dev/null; then
+    if ! command -v golangci-lint &>/dev/null; then
+      log "Installing golangci-lint v2..."
+      curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.1.6 2>/dev/null || true
+    fi
+    if command -v golangci-lint &>/dev/null; then
+      golangci-lint run --timeout 5m "$TARGET" 2>&1 | tee /tmp/golangci-results.json
+      check_exit ${PIPESTATUS[0]} "golangci-lint v2"
+    else
+      warn "golangci-lint v2 installation failed. Falling back to legacy golangci-lint."
+      # --- golangci-lint (fallback) ---
+      log "--- golangci-lint (fallback) ---"
+      if ! command -v golangci-lint &>/dev/null; then
+        log "Installing golangci-lint..."
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin 2>/dev/null || true
+      fi
+      if command -v golangci-lint &>/dev/null; then
+        golangci-lint run --out-format=json "$TARGET" 2>&1 | tee /tmp/golangci-results.json
+        check_exit ${PIPESTATUS[0]} "golangci-lint"
+      else
+        warn "golangci-lint installation failed. Skipping."
+      fi
+    fi
+  else
+    warn "No golangci-lint v2 configuration found. Falling back to legacy golangci-lint."
+    # --- golangci-lint (fallback) ---
+    log "--- golangci-lint (fallback) ---"
+    if ! command -v golangci-lint &>/dev/null; then
+      log "Installing golangci-lint..."
+      curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin 2>/dev/null || true
+    fi
+    if command -v golangci-lint &>/dev/null; then
+      golangci-lint run --out-format=json "$TARGET" 2>&1 | tee /tmp/golangci-results.json
+      check_exit ${PIPESTATUS[0]} "golangci-lint"
+    else
+      warn "golangci-lint installation failed. Skipping."
+    fi
+  fi
 else
-  warn "golangci-lint installation failed. Skipping."
+  warn "No .golangci.yml found. Falling back to legacy golangci-lint."
+  # --- golangci-lint (fallback) ---
+  log "--- golangci-lint (fallback) ---"
+  if ! command -v golangci-lint &>/dev/null; then
+    log "Installing golangci-lint..."
+    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin 2>/dev/null || true
+  fi
+  if command -v golangci-lint &>/dev/null; then
+    golangci-lint run --out-format=json "$TARGET" 2>&1 | tee /tmp/golangci-results.json
+    check_exit ${PIPESTATUS[0]} "golangci-lint"
+  else
+    warn "golangci-lint installation failed. Skipping."
+  fi
 fi
 
 # --- go vet ---

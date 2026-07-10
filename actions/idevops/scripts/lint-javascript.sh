@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# [iDevOps] Lint script for JavaScript/TypeScript using ESLint, Biome, and Prettier
+# [iDevOps] Lint script for JavaScript/TypeScript using Biome, Oxlint, ESLint, and Prettier
 set -euo pipefail
 
 FAIL_ON="${FAIL_ON:-warning}"
@@ -34,7 +34,41 @@ has_files() { find "$TARGET" -maxdepth 3 -type f -name "$1" 2>/dev/null | head -
 
 has_ext() { find "$TARGET" -maxdepth 3 -type f \( -name "*.$1" -o -name "*.$2" -o -name "*.$3" \) 2>/dev/null | head -1 | grep -q .; }
 
-# --- ESLint ---
+# --- Biome (primary) ---
+if has_ext "js" "ts" "jsx" "tsx"; then
+  log "--- Biome ---"
+  if [[ -f "biome.json" ]] || [[ -f "biome.jsonc" ]]; then
+    BIOME_CMD="npx @biomejs/biome"
+    if command -v biome &>/dev/null; then BIOME_CMD="biome"; fi
+    if $BIOME_CMD ci . 2>&1; then
+      check_exit 0 "error" "Biome"
+    else
+      CODE=$?
+      check_exit $CODE "error" "Biome"
+    fi
+  else
+    warn "No biome.json found. Skipping Biome."
+  fi
+fi
+
+# --- Oxlint (primary) ---
+if has_ext "js" "ts" "jsx" "tsx"; then
+  log "--- Oxlint ---"
+  if [[ -f ".oxlintrc.json" ]]; then
+    OXLINT_CMD="npx oxlint"
+    if command -v oxlint &>/dev/null; then OXLINT_CMD="oxlint"; fi
+    if $OXLINT_CMD 2>&1; then
+      check_exit 0 "error" "Oxlint"
+    else
+      CODE=$?
+      check_exit $CODE "error" "Oxlint"
+    fi
+  else
+    warn "No .oxlintrc.json found. Skipping Oxlint."
+  fi
+fi
+
+# --- ESLint (fallback) ---
 if has_ext "js" "ts" "mjs" "cjs"; then
   log "--- ESLint ---"
   if ! command -v eslint &>/dev/null; then
@@ -56,28 +90,6 @@ if has_ext "js" "ts" "mjs" "cjs"; then
     fi
   else
     warn "No ESLint config found. Skipping ESLint."
-  fi
-fi
-
-# --- Biome ---
-if has_ext "js" "ts" "jsx" "tsx"; then
-  log "--- Biome ---"
-  if ! command -v biome &>/dev/null; then
-    if command -v npx &>/dev/null; then
-      log "Using npx for biome..."
-    fi
-  fi
-  if [[ -f "biome.json" ]] || [[ -f "biome.jsonc" ]]; then
-    BIOME_CMD="npx @biomejs/biome"
-    if command -v biome &>/dev/null; then BIOME_CMD="biome"; fi
-    if $BIOME_CMD lint "$TARGET" 2>&1; then
-      check_exit 0 "error" "Biome"
-    else
-      CODE=$?
-      check_exit $CODE "error" "Biome"
-    fi
-  else
-    warn "No biome.json found. Skipping Biome."
   fi
 fi
 
