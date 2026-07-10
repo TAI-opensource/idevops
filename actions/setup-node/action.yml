@@ -1,0 +1,111 @@
+name: "Setup Node.js"
+description: "Install Node.js with version management and npm/yarn/pnpm caching"
+author: "TAI-opensource"
+branding:
+  icon: "download"
+  color: "green"
+
+inputs:
+  node-version:
+    description: "Node.js version (e.g. 22, 26, lts/*)"
+    default: "22"
+  registry-url:
+    description: "npm registry URL for authentication"
+    default: ""
+  cache:
+    description: "Package manager to cache (npm, yarn, pnpm, false)"
+    default: "npm"
+  architecture:
+    description: "Architecture (x64, arm64)"
+    default: "x64"
+
+outputs:
+  node-version:
+    description: "Installed Node.js version"
+    value: "${{ steps.install.outputs.node-version }}"
+  npm-version:
+    description: "Installed npm version"
+    value: "${{ steps.install.outputs.npm-version }}"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Node.js
+      id: install
+      shell: bash
+      env:
+        NODE_VERSION: ${{ inputs.node-version }}
+        ARCH: ${{ inputs.architecture }}
+      run: |
+        set -euo pipefail
+        echo "[Setup Node.js] Version: $NODE_VERSION, Arch: $ARCH"
+
+        # Resolve lts/* aliases
+        RESOLVED_VERSION="$NODE_VERSION"
+        if [[ "$NODE_VERSION" == lts/* ]]; then
+          LTS_NAME="${NODE_VERSION#lts/}"
+          case "$LTS_NAME" in
+            lts) LTS_NAME="hydrogen" ;;
+          esac
+          RESOLVED_VERSION=$(curl -fsSL "https://nodejs.org/dist/index.json" | jq -r --arg lts "$LTS_NAME" '.[] | select(.lts | ascii_downcase == ($lts | ascii_downcase)) | .version' | head -1 | sed 's/^v//')
+          echo "[Setup Node.js] Resolved LTS '$LTS_NAME' to $RESOLVED_VERSION"
+        fi
+
+        # Download and install
+        if [ "$ARCH" = "arm64" ]; then
+          NODE_ARCH="linux-arm64"
+        else
+          NODE_ARCH="linux-x64"
+        fi
+
+        NODE_URL="https://nodejs.org/dist/v${RESOLVED_VERSION}/node-v${RESOLVED_VERSION}-${NODE_ARCH}.tar.xz"
+        echo "[Setup Node.js] Downloading: $NODE_URL"
+
+        curl -fsSL "$NODE_URL" | tar -xJ -C /usr/local --strip-components=1
+
+        # Verify
+        INSTALLED_VERSION=$(node --version | sed 's/^v//')
+        echo "node-version=$INSTALLED_VERSION" >> "$GITHUB_OUTPUT"
+
+        NPM_VERSION=$(npm --version)
+        echo "npm-version=$NPM_VERSION" >> "$GITHUB_OUTPUT"
+
+        echo "[Setup Node.js] Installed Node.js $INSTALLED_VERSION, npm $NPM_VERSION"
+
+        # Update PATH
+        echo "/usr/local/bin" >> "$GITHUB_PATH"
+
+    - name: Configure registry auth
+      if: inputs.registry-url != ''
+      shell: bash
+      env:
+        REGISTRY_URL: ${{ inputs.registry-url }}
+        NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN || inputs.node-version }}
+      run: |
+        echo "//$(echo "$REGISTRY_URL" | sed 's|https://||')/:_authToken=${NODE_AUTH_TOKEN:-}" > ~/.npmrc
+        echo "[Setup Node.js] Registry configured: $REGISTRY_URL"
+
+    - name: Cache npm
+      if: inputs.cache == 'npm'
+      shell: bash
+      run: |
+        CACHE_DIR="$HOME/.npm"
+        mkdir -p "$CACHE_DIR"
+        echo "NPM_CONFIG_CACHE=$CACHE_DIR" >> "$GITHUB_ENV"
+        echo "[Setup Node.js] npm cache: $CACHE_DIR"
+
+    - name: Cache yarn
+      if: inputs.cache == 'yarn'
+      shell: bash
+      run: |
+        CACHE_DIR="$HOME/.cache/yarn"
+        mkdir -p "$CACHE_DIR"
+        echo "[Setup Node.js] yarn cache: $CACHE_DIR"
+
+    - name: Cache pnpm
+      if: inputs.cache == 'pnpm'
+      shell: bash
+      run: |
+        CACHE_DIR="$HOME/.pnpm-store"
+        mkdir -p "$CACHE_DIR"
+        echo "[Setup Node.js] pnpm cache: $CACHE_DIR"

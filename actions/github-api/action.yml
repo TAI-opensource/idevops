@@ -1,0 +1,132 @@
+name: "GitHub API Client"
+description: "Execute GitHub API calls via curl with authentication and error handling"
+author: "TAI-opensource"
+branding:
+  icon: "terminal"
+  color: "purple"
+
+inputs:
+  token:
+    description: "GitHub token for authentication"
+    default: "${{ github.token }}"
+  method:
+    description: "HTTP method (GET, POST, PUT, PATCH, DELETE)"
+    default: "GET"
+  endpoint:
+    description: "API endpoint (e.g. /repos/{owner}/{repo})"
+    required: true
+  body:
+    description: "Request body (JSON string)"
+    default: ""
+  headers:
+    description: "Extra headers (JSON object string)"
+    default: "{}"
+  paginate:
+    description: "Automatically paginate through all results"
+    default: "false"
+  output-file:
+    description: "File path to write response (instead of output)"
+    default: ""
+
+outputs:
+  status:
+    description: "HTTP status code"
+    value: "${{ steps.api.outputs.status }}"
+  body:
+    description: "Response body"
+    value: "${{ steps.api.outputs.body }}"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Execute API call
+      id: api
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.token }}
+        METHOD: ${{ inputs.method }}
+        ENDPOINT: ${{ inputs.endpoint }}
+        BODY: ${{ inputs.body }}
+        HEADERS: ${{ inputs.headers }}
+        PAGINATE: ${{ inputs.paginate }}
+        OUTPUT_FILE: ${{ inputs.output-file }}
+        REPO: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+
+        # Resolve endpoint
+        FULL_URL=$(echo "$ENDPOINT" | sed "s|{owner}|${REPO%%/*}|g; s|{repo}|${REPO#*/}|g")
+        if [[ ! "$FULL_URL" =~ ^https:// ]]; then
+          FULL_URL="https://api.github.com${FULL_URL}"
+        fi
+
+        # Build curl args
+        CURL_ARGS=(-s -w "\n%{http_code}" -X "$METHOD")
+        CURL_ARGS+=(-H "Authorization: token $TOKEN")
+        CURL_ARGS+=(-H "Accept: application/vnd.github.v3+json")
+        CURL_ARGS+=(-H "User-Agent: iDevOps-Actions")
+
+        # Extra headers
+        if [ "$HEADERS" != "{}" ]; then
+          echo "$HEADERS" | jq -r 'to_entries[] | "\(.key): \(.value)"' | while IFS=: read -r key value; do
+            CURL_ARGS+=(-H "$key: $value")
+          done
+        fi
+
+        # Body
+        if [ -n "$BODY" ]; then
+          CURL_ARGS+=(-d "$BODY")
+        fi
+
+        # Paginate
+        if [ "$PAGINATE" = "true" ]; then
+          ALL_RESULTS="[]"
+          PAGE_URL="$FULL_URL"
+          PAGE=1
+
+          while true; do
+            echo "[GitHub API] GET $PAGE_URL (page $PAGE)"
+            RESPONSE=$(curl "${CURL_ARGS[@]}" "$PAGE_URL")
+            STATUS=$(echo "$RESPONSE" | tail -1)
+            BODY_DATA=$(echo "$RESPONSE" | sed '$d')
+
+            ALL_RESULTS=$(echo "$ALL_RESULTS" "$BODY_DATA" | jq -s '.[0] + (if (.[1] | type) == "array" then .[1] else [.[1]] end)')
+
+            # Check for next page
+            NEXT_PAGE=$(echo "$BODY_DATA" | jq -r '.[0].next // empty' 2>/dev/null || true)
+            if [ -z "$NEXT_PAGE" ] || [ "$STATUS" != "200" ]; then
+              break
+            fi
+
+            PAGE_URL="$NEXT_PAGE"
+            PAGE=$((PAGE + 1))
+          done
+
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [ -n "$OUTPUT_FILE" ]; then
+            echo "$ALL_RESULTS" | jq '.' > "$OUTPUT_FILE"
+            echo "body=<file>$OUTPUT_FILE" >> "$GITHUB_OUTPUT"
+          else
+            echo "body=$ALL_RESULTS" >> "$GITHUB_OUTPUT"
+          fi
+        else
+          echo "[GitHub API] $METHOD $FULL_URL"
+          RESPONSE=$(curl "${CURL_ARGS[@]}" "$FULL_URL")
+          STATUS=$(echo "$RESPONSE" | tail -1)
+          BODY_DATA=$(echo "$RESPONSE" | sed '$d')
+
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          if [ -n "$OUTPUT_FILE" ]; then
+            echo "$BODY_DATA" | jq '.' > "$OUTPUT_FILE"
+            echo "body=<file>$OUTPUT_FILE" >> "$GITHUB_OUTPUT"
+          else
+            echo "body=$BODY_DATA" >> "$GITHUB_OUTPUT"
+          fi
+        fi
+
+        echo "[GitHub API] Status: $STATUS"
+        if [ "$STATUS" -ge 400 ]; then
+          echo "[GitHub API] Error response:"
+          echo "$BODY_DATA" | jq '.' 2>/dev/null || echo "$BODY_DATA"
+          exit 1
+        fi

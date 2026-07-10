@@ -1,0 +1,154 @@
+name: "Checkout"
+description: "Clone repository with auth, shallow clone, submodules and LFS support"
+author: "TAI-opensource"
+branding:
+  icon: "git-branch"
+  color: "blue"
+
+inputs:
+  token:
+    description: "GitHub token for authentication"
+    default: "${{ github.token }}"
+  ref:
+    description: "Branch, tag, or SHA to checkout"
+    default: ""
+  repository:
+    description: "Repository to clone (owner/repo)"
+    default: "${{ github.repository }}"
+  path:
+    description: "Path to clone into"
+    default: ""
+  fetch-depth:
+    description: "Number of commits to fetch (0 for all)"
+    default: "1"
+  submodules:
+    description: "Clone submodules (true/false/recursive)"
+    default: "false"
+  lfs:
+    description: "Pull LFS objects"
+    default: "false"
+  sparse-checkout:
+    description: "Sparse checkout patterns (newline-separated)"
+    default: ""
+  persist-credentials:
+    description: "Persist credentials after checkout"
+    default: "true"
+
+outputs:
+  ref:
+    description: "Branch or tag that was checked out"
+    value: "${{ steps.resolve.outputs.ref }}"
+  sha:
+    description: "SHA that was checked out"
+    value: "${{ steps.resolve.outputs.sha }}"
+  repository:
+    description: "Repository that was cloned"
+    value: "${{ inputs.repository }}"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Resolve ref
+      id: resolve
+      shell: bash
+      run: |
+        REF="${{ inputs.ref }}"
+        if [ -z "$REF" ]; then
+          REF="${{ github.event.pull_request.head.sha || github.event.after || github.sha }}"
+          if [ -z "$REF" ] || [ "$REF" = "0000000000000000000000000000000000000000" ]; then
+            REF="${{ github.ref }}"
+          fi
+        fi
+
+        if [[ "$REF" == refs/* ]]; then
+          RESOLVED_REF="${REF#refs/heads/}"
+          RESOLVED_REF="${RESOLVED_REF#refs/tags/}"
+        else
+          RESOLVED_REF="$REF"
+        fi
+
+        echo "ref=$RESOLVED_REF" >> "$GITHUB_OUTPUT"
+        echo "sha=" >> "$GITHUB_OUTPUT"
+        echo "[Checkout] Ref: $RESOLVED_REF"
+
+    - name: Clone repository
+      shell: bash
+      env:
+        REPO: ${{ inputs.repository }}
+        TOKEN: ${{ inputs.token }}
+        REF: ${{ steps.resolve.outputs.ref }}
+        PATH_OUT: ${{ inputs.path }}
+        DEPTH: ${{ inputs.fetch-depth }}
+      run: |
+        set -euo pipefail
+
+        CLONE_URL="https://x-access-token:${TOKEN}@github.com/${REPO}.git"
+
+        GIT_ARGS=(clone)
+        if [ "$DEPTH" != "0" ]; then
+          GIT_ARGS+=(--depth "$DEPTH")
+        fi
+        GIT_ARGS+=(--branch "$REF")
+        GIT_ARGS+=(--no-tags)
+
+        TARGET_DIR="."
+        if [ -n "$PATH_OUT" ]; then
+          TARGET_DIR="$PATH_OUT"
+          mkdir -p "$TARGET_DIR"
+        fi
+
+        GIT_ARGS+=("$CLONE_URL" "$TARGET_DIR")
+
+        git "${GIT_ARGS[@]}"
+
+        cd "$TARGET_DIR"
+        git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${REPO}.git"
+
+        SHA=$(git rev-parse HEAD)
+        echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+        echo "[Checkout] SHA: $SHA"
+
+    - name: Configure sparse checkout
+      if: inputs.sparse-checkout != ''
+      shell: bash
+      env:
+        PATTERNS: ${{ inputs.sparse-checkout }}
+        PATH_OUT: ${{ inputs.path }}
+      run: |
+        cd "${PATH_OUT:-.}"
+        git sparse-checkout init --cone
+        echo "$PATTERNS" | while IFS= read -r line; do
+          [ -n "$line" ] && git sparse-checkout set "$line"
+        done
+
+    - name: Fetch submodules
+      if: inputs.submodules != 'false'
+      shell: bash
+      env:
+        SUBMODULES: ${{ inputs.submodules }}
+        PATH_OUT: ${{ inputs.path }}
+      run: |
+        cd "${PATH_OUT:-.}"
+        if [ "$SUBMODULES" = "recursive" ]; then
+          git submodule update --init --recursive
+        else
+          git submodule update --init
+        fi
+
+    - name: Pull LFS objects
+      if: inputs.lfs == 'true'
+      shell: bash
+      env:
+        PATH_OUT: ${{ inputs.path }}
+      run: |
+        cd "${PATH_OUT:-.}"
+        git lfs pull
+
+    - name: Remove persist-credentials
+      if: inputs.persist-credentials != 'true'
+      shell: bash
+      env:
+        PATH_OUT: ${{ inputs.path }}
+      run: |
+        cd "${PATH_OUT:-.}"
+        git config --local --unset-all credential.helper || true

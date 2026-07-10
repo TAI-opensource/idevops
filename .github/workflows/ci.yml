@@ -15,10 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: ./actions/checkout
+        with:
+          token: ${{ github.token }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: ./actions/setup-node
         with:
           node-version: 26
           cache: "npm"
@@ -37,21 +39,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Validate action.yml
-        uses: actions/github-script@v7
+        uses: ./actions/checkout
         with:
-          script: |
-            const fs = require('fs');
-            const yaml = require('yaml');
-            const content = fs.readFileSync('actions/idevops/action.yml', 'utf8');
-            try {
-              yaml.parse(content);
-              core.info('action.yml is valid YAML');
-            } catch (e) {
-              core.setFailed(`action.yml is invalid: ${e.message}`);
+          token: ${{ github.token }}
+
+      - name: Validate action.yml syntax
+        shell: bash
+        run: |
+          # Install yq for YAML validation
+          sudo curl -fsSL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64" -o /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+
+          for action_file in actions/*/action.yml; do
+            echo "Validating: $action_file"
+            yq eval '.' "$action_file" > /dev/null 2>&1 || {
+              echo "ERROR: Invalid YAML in $action_file"
+              yq eval '.' "$action_file"
+              exit 1
             }
+            echo "OK: $action_file"
+          done
 
       - name: Check shell scripts syntax
         run: |
@@ -61,12 +68,31 @@ jobs:
           done
           echo "All scripts have valid syntax"
 
+      - name: Validate action inputs/outputs
+        shell: bash
+        run: |
+          for action_file in actions/*/action.yml; do
+            echo "Checking structure: $action_file"
+            # Verify required fields exist
+            yq eval '.name' "$action_file" | grep -q "null" && {
+              echo "ERROR: Missing 'name' in $action_file"
+              exit 1
+            }
+            yq eval '.runs' "$action_file" | grep -q "null" && {
+              echo "ERROR: Missing 'runs' in $action_file"
+              exit 1
+            }
+            echo "OK: $action_file"
+          done
+
   security:
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: ./actions/checkout
+        with:
+          token: ${{ github.token }}
 
       - name: Run audit
         run: echo "Shell scripts only, no npm audit needed"
