@@ -1,16 +1,18 @@
 {
   "name": "idevops",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
+  "description": "All-in-One GitHub Action for security, linting, code quality, secret detection, dependency auditing & more.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TAI-opensource/idevops.git"
+  },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "type-check": "node_modules/typescript-7/bin/tsc --noEmit",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -25,39 +27,7 @@
       "prettier --write"
     ]
   },
-  "dependencies": {
-    "@base-ui/react": "^1.6.0",
-    "@sentry/nextjs": "^10.64.0",
-    "@shadcn/react": "^0.2.1",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "cmdk": "^1.1.1",
-    "date-fns": "^4.4.0",
-    "embla-carousel-react": "^8.6.0",
-    "input-otp": "^1.4.2",
-    "lucide-react": "^1.24.0",
-    "next": "16.2.10",
-    "next-themes": "^0.4.6",
-    "react": "19.2.4",
-    "react-day-picker": "^10.0.1",
-    "react-dom": "19.2.4",
-    "react-resizable-panels": "^4.12.1",
-    "recharts": "^3.8.0",
-    "rrweb": "^2.1.0",
-    "shadcn": "^4.13.0",
-    "sonner": "^2.0.7",
-    "tailwind-merge": "^3.6.0",
-    "tw-animate-css": "^1.4.0"
-  },
-  "overrides": {
-    "postcss": "8.5.16"
-  },
   "devDependencies": {
-    "@rrweb/types": "^2.1.0",
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^26.1.1",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
     "eslint": "^10.6.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-jsx-a11y": "^6.10.2",
@@ -67,10 +37,6 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8",
     "prettier": "^3.9.5",
-    "prettier-plugin-tailwindcss": "^0.8.0",
-    "tailwindcss": "^4",
-    "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "typescript-7": "npm:typescript@^7.0.1-rc",
     "typescript-eslint": "^8.63.0"
   }
 }
