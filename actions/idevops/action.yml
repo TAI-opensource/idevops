@@ -21,7 +21,7 @@ inputs:
   sca:
     description: "Run SCA scans"
     default: "true"
-  secrets:
+  scan-secrets:
     description: "Scan for secrets"
     default: "true"
   lint:
@@ -96,485 +96,646 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: "iDevOps - Setup"
+    # ══════════════════════════════════════════════════════════════
+    # PHASE 1 - SETUP
+    # ══════════════════════════════════════════════════════════════
+    - name: "iDevOps: Setup"
       shell: bash
       run: |
-        echo "[iDevOps] All-in-One DevOps Pipeline"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "Languages:    ${{ inputs.languages }}"
-        echo "Security:     ${{ inputs.security }}"
-        echo "SAST:         ${{ inputs.sast }}"
-        echo "SCA:          ${{ inputs.sca }}"
-        echo "Secrets:      ${{ inputs.secrets }}"
-        echo "Lint:         ${{ inputs.lint }}"
-        echo "Quality:      ${{ inputs.quality }}"
-        echo "Dependencies: ${{ inputs.dependencies }}"
-        echo "Docker:       ${{ inputs.docker }}"
-        echo "IaC:          ${{ inputs.iac }}"
-        echo "DAST:         ${{ inputs.dast }}"
-        echo "Recon:        ${{ inputs.recon }}"
-        echo "SBOM:         ${{ inputs.sbom }}"
-        echo "Fail-on:      ${{ inputs.fail-on }}"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "::group::iDevOps Configuration"
+        echo "╔══════════════════════════════════════════════════╗"
+        echo "║           iDevOps - DevSecOps Pipeline           ║"
+        echo "╠══════════════════════════════════════════════════╣"
+        echo "║  Languages:    ${{ inputs.languages }}"
+        echo "║  Security:     ${{ inputs.security }}"
+        echo "║  SAST:         ${{ inputs.sast }}"
+        echo "║  SCA:          ${{ inputs.sca }}"
+        echo "║  Secrets:      ${{ inputs.scan-secrets }}"
+        echo "║  Lint:         ${{ inputs.lint }}"
+        echo "║  Quality:      ${{ inputs.quality }}"
+        echo "║  Dependencies: ${{ inputs.dependencies }}"
+        echo "║  Docker:       ${{ inputs.docker }}"
+        echo "║  IaC:          ${{ inputs.iac }}"
+        echo "║  DAST:         ${{ inputs.dast }}"
+        echo "║  Recon:        ${{ inputs.recon }}"
+        echo "║  SBOM:         ${{ inputs.sbom }}"
+        echo "║  Fail-on:      ${{ inputs.fail-on }}"
+        echo "╚══════════════════════════════════════════════════╝"
+        echo "::endgroup::"
 
         chmod +x ${{ github.action_path }}/scripts/*.sh 2>/dev/null || true
         mkdir -p "${{ inputs.report-dir }}"
 
-    # ─────────────────────────────────────────────
-    # SECURITY
-    # ─────────────────────────────────────────────
-    - name: "Security: Universal scan"
+    # ══════════════════════════════════════════════════════════════
+    # PHASE 2 - SECURITY
+    # ══════════════════════════════════════════════════════════════
+    - name: "iDevOps: Security Scan (Universal)"
       if: inputs.security == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/security-universal.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Security Universal Scan"
+        ${{ github.action_path }}/scripts/security-universal.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
         LANGUAGES: ${{ inputs.languages }}
         GITHUB_TOKEN: ${{ inputs.token }}
-      continue-on-error: true
 
-    - name: "Security: Trivy"
+    - name: "iDevOps: Security Scan (Trivy)"
       if: inputs.security == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/security-trivy.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Security Trivy Scan"
+        ${{ github.action_path }}/scripts/security-trivy.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Security: OSV-Scanner"
+    - name: "iDevOps: SAST (OSV-Scanner)"
       if: inputs.sca == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/security-osv.sh
+      continue-on-error: true
+      run: |
+        echo "::group::SAST OSV-Scanner"
+        ${{ github.action_path }}/scripts/security-osv.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Security: Semgrep SAST"
+    - name: "iDevOps: SAST (Semgrep)"
       if: inputs.sast == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/security-semgrep.sh
+      continue-on-error: true
+      run: |
+        echo "::group::SAST Semgrep"
+        ${{ github.action_path }}/scripts/security-semgrep.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
         LANGUAGES: ${{ inputs.languages }}
         SEMGREP_APP_TOKEN: ${{ inputs.semgrep-app-token }}
-      continue-on-error: true
 
-    # ─────────────────────────────────────────────
-    # SECRETS
-    # ─────────────────────────────────────────────
-    - name: "Secrets: Gitleaks"
-      if: inputs.secrets == 'true'
+    # ══════════════════════════════════════════════════════════════
+    # PHASE 3 - SECRETS
+    # ══════════════════════════════════════════════════════════════
+    - name: "iDevOps: Secret Detection (Gitleaks)"
+      if: inputs.scan-secrets == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/secrets-gitleaks.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Secret Detection Gitleaks"
+        ${{ github.action_path }}/scripts/secrets-gitleaks.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
         GITHUB_TOKEN: ${{ inputs.token }}
-      continue-on-error: true
 
-    - name: "Secrets: TruffleHog"
-      if: inputs.secrets == 'true'
+    - name: "iDevOps: Secret Detection (TruffleHog)"
+      if: inputs.scan-secrets == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/secrets-trufflehog.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Secret Detection TruffleHog"
+        ${{ github.action_path }}/scripts/secrets-trufflehog.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    # ─────────────────────────────────────────────
-    # LINTING
-    # ─────────────────────────────────────────────
-    - name: "Lint: JavaScript/TypeScript"
+    # ══════════════════════════════════════════════════════════════
+    # PHASE 4 - LINTING
+    # ══════════════════════════════════════════════════════════════
+    - name: "iDevOps: Lint JavaScript/TypeScript"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'javascript') || contains(inputs.languages, 'typescript') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-javascript.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint JavaScript/TypeScript"
+        ${{ github.action_path }}/scripts/lint-javascript.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
         FIX: ${{ inputs.lint-fix }}
-      continue-on-error: true
 
-    - name: "Lint: Python"
+    - name: "iDevOps: Lint Python"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'python') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-python.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Python"
+        ${{ github.action_path }}/scripts/lint-python.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
         FIX: ${{ inputs.lint-fix }}
-      continue-on-error: true
 
-    - name: "Lint: Rust"
+    - name: "iDevOps: Lint Rust"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'rust') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-rust.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Rust"
+        ${{ github.action_path }}/scripts/lint-rust.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Go"
+    - name: "iDevOps: Lint Go"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'go') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-go.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Go"
+        ${{ github.action_path }}/scripts/lint-go.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Java/Kotlin"
+    - name: "iDevOps: Lint Java/Kotlin"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'java') || contains(inputs.languages, 'kotlin') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-java.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Java/Kotlin"
+        ${{ github.action_path }}/scripts/lint-java.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: C/C++"
+    - name: "iDevOps: Lint C/C++"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'c') || contains(inputs.languages, 'cpp') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-c-cpp.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint C/C++"
+        ${{ github.action_path }}/scripts/lint-c-cpp.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Ruby"
+    - name: "iDevOps: Lint C#"
+      if: inputs.lint == 'true' && (contains(inputs.languages, 'csharp') || inputs.languages == 'auto')
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Lint C#"
+        ${{ github.action_path }}/scripts/lint-csharp.sh
+        echo "::endgroup::"
+      env:
+        FAIL_ON: ${{ inputs.fail-on }}
+
+    - name: "iDevOps: Lint Ruby"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'ruby') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-ruby.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Ruby"
+        ${{ github.action_path }}/scripts/lint-ruby.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: PHP"
+    - name: "iDevOps: Lint PHP"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'php') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-php.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint PHP"
+        ${{ github.action_path }}/scripts/lint-php.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Swift"
+    - name: "iDevOps: Lint Swift"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'swift') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-swift.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Swift"
+        ${{ github.action_path }}/scripts/lint-swift.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Scala"
+    - name: "iDevOps: Lint Scala"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'scala') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-scala.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Scala"
+        ${{ github.action_path }}/scripts/lint-scala.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Haskell"
+    - name: "iDevOps: Lint Haskell"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'haskell') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-haskell.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Haskell"
+        ${{ github.action_path }}/scripts/lint-haskell.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Elixir"
+    - name: "iDevOps: Lint Elixir"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'elixir') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-elixir.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Elixir"
+        ${{ github.action_path }}/scripts/lint-elixir.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Dart"
+    - name: "iDevOps: Lint Dart"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'dart') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-dart.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Dart"
+        ${{ github.action_path }}/scripts/lint-dart.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Shell"
+    - name: "iDevOps: Lint Shell"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'shell') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-shell.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Shell"
+        ${{ github.action_path }}/scripts/lint-shell.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Lua"
+    - name: "iDevOps: Lint Lua"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'lua') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-lua.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Lua"
+        ${{ github.action_path }}/scripts/lint-lua.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Perl"
+    - name: "iDevOps: Lint Perl"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'perl') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-perl.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Perl"
+        ${{ github.action_path }}/scripts/lint-perl.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: R"
+    - name: "iDevOps: Lint R"
       if: inputs.lint == 'true' && inputs.languages != 'auto'
       shell: bash
+      continue-on-error: true
       run: |
+        echo "::group::Lint R"
         LANGS="${{ inputs.languages }}"
         if echo ",$LANGS," | grep -q ",r,"; then
           ${{ github.action_path }}/scripts/lint-r.sh
+        else
+          echo "R not in specified languages, skipping"
         fi
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: R (auto)"
+    - name: "iDevOps: Lint R (auto)"
       if: inputs.lint == 'true' && inputs.languages == 'auto'
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-r.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint R"
+        ${{ github.action_path }}/scripts/lint-r.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Julia"
+    - name: "iDevOps: Lint Julia"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'julia') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-julia.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Julia"
+        ${{ github.action_path }}/scripts/lint-julia.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: PowerShell"
+    - name: "iDevOps: Lint PowerShell"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'powershell') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-powershell.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint PowerShell"
+        ${{ github.action_path }}/scripts/lint-powershell.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: SQL"
+    - name: "iDevOps: Lint SQL"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'sql') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-sql.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint SQL"
+        ${{ github.action_path }}/scripts/lint-sql.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: GraphQL"
+    - name: "iDevOps: Lint GraphQL"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'graphql') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-graphql.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint GraphQL"
+        ${{ github.action_path }}/scripts/lint-graphql.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Protobuf"
+    - name: "iDevOps: Lint Protobuf"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'protobuf') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-protobuf.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Protobuf"
+        ${{ github.action_path }}/scripts/lint-protobuf.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: CSS"
+    - name: "iDevOps: Lint CSS"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'css') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-css.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint CSS"
+        ${{ github.action_path }}/scripts/lint-css.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: HTML"
+    - name: "iDevOps: Lint HTML"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'html') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-html.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint HTML"
+        ${{ github.action_path }}/scripts/lint-html.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: YAML"
+    - name: "iDevOps: Lint YAML"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'yaml') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-yaml.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint YAML"
+        ${{ github.action_path }}/scripts/lint-yaml.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: JSON"
+    - name: "iDevOps: Lint JSON"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'json') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-json.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint JSON"
+        ${{ github.action_path }}/scripts/lint-json.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Markdown"
+    - name: "iDevOps: Lint Markdown"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'markdown') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-markdown.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Markdown"
+        ${{ github.action_path }}/scripts/lint-markdown.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Docker"
+    - name: "iDevOps: Lint Docker"
       if: inputs.docker == 'true' || inputs.docker == 'auto' || (inputs.lint == 'true' && contains(inputs.languages, 'docker'))
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-docker.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Docker"
+        ${{ github.action_path }}/scripts/lint-docker.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Terraform"
+    - name: "iDevOps: Lint Terraform"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'terraform') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-terraform.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Terraform"
+        ${{ github.action_path }}/scripts/lint-terraform.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Kubernetes"
+    - name: "iDevOps: Lint Kubernetes"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'kubernetes') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-kubernetes.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Kubernetes"
+        ${{ github.action_path }}/scripts/lint-kubernetes.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Helm"
+    - name: "iDevOps: Lint Helm"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'helm') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-helm.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Helm"
+        ${{ github.action_path }}/scripts/lint-helm.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: Ansible"
+    - name: "iDevOps: Lint Ansible"
       if: inputs.lint == 'true' && (contains(inputs.languages, 'ansible') || inputs.languages == 'auto')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-ansible.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Lint Ansible"
+        ${{ github.action_path }}/scripts/lint-ansible.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
 
-    - name: "Lint: C#"
-      if: inputs.lint == 'true' && (contains(inputs.languages, 'csharp') || inputs.languages == 'auto')
-      shell: bash
-      run: ${{ github.action_path }}/scripts/lint-csharp.sh
-      env:
-        FAIL_ON: ${{ inputs.fail-on }}
-      continue-on-error: true
-
-    # ─────────────────────────────────────────────
-    # IaC
-    # ─────────────────────────────────────────────
-    - name: "IaC: Scan"
+    # ══════════════════════════════════════════════════════════════
+    # PHASE 5 - IaC
+    # ══════════════════════════════════════════════════════════════
+    - name: "iDevOps: IaC Scan"
       if: inputs.iac == 'true' || inputs.iac == 'auto'
       shell: bash
-      run: ${{ github.action_path }}/scripts/iac-scanner.sh
+      continue-on-error: true
+      run: |
+        echo "::group::IaC Scan"
+        ${{ github.action_path }}/scripts/iac-scanner.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
         IAC_TYPES: ${{ inputs.iac-types }}
-      continue-on-error: true
 
-    # ─────────────────────────────────────────────
-    # CONTAINER
-    # ─────────────────────────────────────────────
-    - name: "Container: Scan"
+    # ══════════════════════════════════════════════════════════════
+    # PHASE 6 - CONTAINER
+    # ══════════════════════════════════════════════════════════════
+    - name: "iDevOps: Container Security"
       if: inputs.docker == 'true' || inputs.docker == 'auto' || inputs.container-image != ''
       shell: bash
-      run: ${{ github.action_path }}/scripts/container-scanner.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Container Security"
+        ${{ github.action_path }}/scripts/container-scanner.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
         CONTAINER_IMAGE: ${{ inputs.container-image }}
-      continue-on-error: true
 
-    # ─────────────────────────────────────────────
-    # DAST
-    # ─────────────────────────────────────────────
-    - name: "DAST: Scan"
+    # ══════════════════════════════════════════════════════════════
+    # PHASE 7 - DAST
+    # ══════════════════════════════════════════════════════════════
+    - name: "iDevOps: DAST Scan"
       if: inputs.dast == 'true' && inputs.target-url != ''
       shell: bash
-      run: ${{ github.action_path }}/scripts/dast-scanner.sh
+      continue-on-error: true
+      run: |
+        echo "::group::DAST Scan"
+        ${{ github.action_path }}/scripts/dast-scanner.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
         TARGET_URL: ${{ inputs.target-url }}
-      continue-on-error: true
 
-    # ─────────────────────────────────────────────
-    # RECON
-    # ─────────────────────────────────────────────
-    - name: "Recon: Scan"
+    # ══════════════════════════════════════════════════════════════
+    # PHASE 8 - RECON
+    # ══════════════════════════════════════════════════════════════
+    - name: "iDevOps: Recon Scan"
       if: inputs.recon == 'true' && inputs.target-url != ''
       shell: bash
-      run: ${{ github.action_path }}/scripts/recon-scanner.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Recon Scan"
+        ${{ github.action_path }}/scripts/recon-scanner.sh
+        echo "::endgroup::"
       env:
         TARGET_URL: ${{ inputs.target-url }}
-      continue-on-error: true
 
-    # ─────────────────────────────────────────────
-    # DEPENDENCIES
-    # ─────────────────────────────────────────────
-    - name: "Dependencies: Audit"
+    # ══════════════════════════════════════════════════════════════
+    # PHASE 9 - DEPENDENCIES
+    # ══════════════════════════════════════════════════════════════
+    - name: "iDevOps: Dependencies Audit"
       if: inputs.dependencies == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/deps-universal.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Dependencies Audit"
+        ${{ github.action_path }}/scripts/deps-universal.sh
+        echo "::endgroup::"
       env:
         FAIL_ON: ${{ inputs.fail-on }}
         LANGUAGES: ${{ inputs.languages }}
-      continue-on-error: true
 
-    - name: "Dependencies: Outdated"
+    - name: "iDevOps: Dependencies Outdated"
       if: inputs.check-outdated == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/outdated-checker.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Dependencies Outdated"
+        ${{ github.action_path }}/scripts/outdated-checker.sh
+        echo "::endgroup::"
       env:
         LANGUAGES: ${{ inputs.languages }}
-      continue-on-error: true
 
-    - name: "Dependencies: Licenses"
+    - name: "iDevOps: License Compliance"
       if: inputs.check-licenses == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/license-scanner.sh
+      continue-on-error: true
+      run: |
+        echo "::group::License Compliance"
+        ${{ github.action_path }}/scripts/license-scanner.sh
+        echo "::endgroup::"
       env:
         LANGUAGES: ${{ inputs.languages }}
-      continue-on-error: true
 
-    # ─────────────────────────────────────────────
-    # QUALITY
-    # ─────────────────────────────────────────────
-    - name: "Quality: Metrics"
+    # ══════════════════════════════════════════════════════════════
+    # PHASE 10 - QUALITY
+    # ══════════════════════════════════════════════════════════════
+    - name: "iDevOps: Code Quality"
       if: inputs.quality == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/quality.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Code Quality"
+        ${{ github.action_path }}/scripts/quality.sh
+        echo "::endgroup::"
       env:
         LANGUAGES: ${{ inputs.languages }}
-      continue-on-error: true
 
-    # ─────────────────────────────────────────────
-    # SBOM
-    # ─────────────────────────────────────────────
-    - name: "SBOM: Generate"
+    # ══════════════════════════════════════════════════════════════
+    # PHASE 11 - SBOM
+    # ══════════════════════════════════════════════════════════════
+    - name: "iDevOps: SBOM Generation"
       if: inputs.sbom == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/sbom-generator.sh
+      continue-on-error: true
+      run: |
+        echo "::group::SBOM Generation"
+        ${{ github.action_path }}/scripts/sbom-generator.sh
+        echo "::endgroup::"
       env:
         SBOM_FORMAT: ${{ inputs.sbom-format }}
-      continue-on-error: true
 
-    # ─────────────────────────────────────────────
-    # REPORTING
-    # ─────────────────────────────────────────────
-    - name: "Report: Summary"
+    # ══════════════════════════════════════════════════════════════
+    # PHASE 12 - REPORTING
+    # ══════════════════════════════════════════════════════════════
+    - name: "iDevOps: Generate Report"
       id: summary
       if: always()
       shell: bash
-      run: ${{ github.action_path }}/scripts/summary.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Generate Report"
+        ${{ github.action_path }}/scripts/summary.sh
+        echo "::endgroup::"
       env:
         GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
         FAIL_ON: ${{ inputs.fail-on }}
 
-    - name: "Report: SARIF"
+    - name: "iDevOps: Upload SARIF"
       id: sarif
       if: inputs.upload-sarif == 'true' && always()
       shell: bash
-      run: ${{ github.action_path }}/scripts/sarif-upload.sh
+      continue-on-error: true
+      run: |
+        echo "::group::Upload SARIF"
+        ${{ github.action_path }}/scripts/sarif-upload.sh
+        echo "::endgroup::"
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
         REPORT_DIR: ${{ inputs.report-dir }}
-      continue-on-error: true

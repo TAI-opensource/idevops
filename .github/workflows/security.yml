@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
+    # Weekly scan on Mondays at 06:00 UTC
     - cron: "0 6 * * 1"
 
 permissions:
@@ -13,6 +14,9 @@ permissions:
   security-events: write
 
 jobs:
+  # ─────────────────────────────────────────────
+  # Job 1: Security-focused iDevOps scan
+  # ─────────────────────────────────────────────
   idevops-security:
     name: iDevOps Security
     runs-on: ubuntu-latest
@@ -20,26 +24,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Full history for better secret detection
 
       - name: Run iDevOps Security
         uses: TAI-opensource/idevops/actions/idevops@main
         with:
+          # Language detection
           languages: "auto"
-          security: "true"
-          sast: "true"
-          sca: "true"
-          secrets: "true"
-          lint: "false"
-          quality: "false"
-          dependencies: "true"
-          check-outdated: "true"
-          fail-on: "high"
+          # Security scanning (all enabled)
+          security: "true" # Run security scans (Trivy, OSV-Scanner)
+          sast: "true" # Run Semgrep SAST scans
+          sca: "true" # Run Software Composition Analysis
+          scan-secrets: "true" # Scan for leaked secrets (Gitleaks, TruffleHog)
+          # Code quality (disabled for security-only scan)
+          lint: "false" # Skip linting in security workflow
+          quality: "false" # Skip quality metrics in security workflow
+          # Dependencies
+          dependencies: "true" # Audit dependencies for vulnerabilities
+          check-outdated: "true" # Check for outdated packages
+          # Fail threshold: critical, high, medium, low, never
+          fail-on: "high" # Stricter threshold for security workflow
+          # SARIF upload to GitHub Security tab
           upload-sarif: "true"
+          # Semgrep App token for custom rules (passed as input, not env)
           semgrep-app-token: ${{ secrets.SEMGREP_APP_TOKEN }}
 
+  # ─────────────────────────────────────────────
+  # Job 2: OpenSSF Scorecard analysis
+  # ─────────────────────────────────────────────
   scorecard:
-    name: OpenSSF Scorecard
+    name: Scorecard
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

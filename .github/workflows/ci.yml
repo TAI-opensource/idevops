@@ -11,6 +11,9 @@ permissions:
   security-events: write
 
 jobs:
+  # ─────────────────────────────────────────────
+  # Job 1: Full iDevOps pipeline
+  # ─────────────────────────────────────────────
   idevops:
     name: iDevOps Pipeline
     runs-on: ubuntu-latest
@@ -21,21 +24,31 @@ jobs:
       - name: Run iDevOps
         uses: TAI-opensource/idevops/actions/idevops@main
         with:
+          # Language detection: "auto" detects from repo, or comma-separated list
           languages: "auto"
-          security: "true"
-          sast: "true"
-          sca: "true"
-          secrets: "true"
-          lint: "true"
-          quality: "true"
-          dependencies: "true"
-          check-outdated: "true"
+          # Security scanning
+          security: "true" # Run security scans (Trivy, OSV-Scanner)
+          sast: "true" # Run Semgrep SAST scans
+          sca: "true" # Run Software Composition Analysis
+          scan-secrets: "true" # Scan for leaked secrets (Gitleaks, TruffleHog)
+          # Code quality
+          lint: "true" # Run language-specific linters
+          quality: "true" # Run code quality metrics
+          # Dependencies
+          dependencies: "true" # Audit dependencies for vulnerabilities
+          check-outdated: "true" # Check for outdated packages
+          # Fail threshold: critical, high, medium, low, never
           fail-on: "medium"
+          # SARIF upload to GitHub Security tab
           upload-sarif: "true"
+          # Semgrep App token for custom rules (passed as input, not env)
           semgrep-app-token: ${{ secrets.SEMGREP_APP_TOKEN }}
 
+  # ─────────────────────────────────────────────
+  # Job 2: Validate action YAML and scripts
+  # ─────────────────────────────────────────────
   validate:
-    name: Validate Action
+    name: Validate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -64,3 +77,30 @@ jobs:
             bash -n "$script" || exit 1
           done
           echo "All scripts valid"
+
+  # ─────────────────────────────────────────────
+  # Job 3: Report overall workflow status
+  # ─────────────────────────────────────────────
+  status:
+    name: Status
+    if: always()
+    needs: [idevops, validate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report status
+        shell: bash
+        run: |
+          echo "## CI Workflow Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| iDevOps Pipeline | ${{ needs.idevops.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Validate | ${{ needs.validate.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.idevops.result }}" != "success" ] || [ "${{ needs.validate.result }}" != "success" ]; then
+            echo "One or more jobs failed."
+            exit 1
+          fi
+
+          echo "All jobs passed."
