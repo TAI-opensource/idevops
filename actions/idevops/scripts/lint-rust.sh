@@ -1,50 +1,64 @@
 #!/usr/bin/env bash
-# iDevOps - Rust Linting (Clippy + cargo-audit)
+# [iDevOps] Lint script for Rust using Clippy, rustfmt, and cargo-deny
 set -euo pipefail
 
-FAIL_ON="${FAIL_ON:-high}"
-
-echo "[iDevOps] Clippy -- Rust Linting & Security"
-echo "--------------------------------------------"
-
+FAIL_ON="${FAIL_ON:-warning}"
+TARGET="${1:-.}"
 EXIT_CODE=0
 
-if [ -f "Cargo.toml" ]; then
-  echo "[iDevOps] Running Clippy..."
-  cargo clippy --all-targets --all-features --message-format json 2>/dev/null | \
-    python3 -c "
-import sys, json
-warnings = 0
-errors = 0
-for line in sys.stdin:
-    try:
-        d = json.loads(line)
-        msg = d.get('message', {})
-        level = msg.get('level', '')
-        if level == 'warning': warnings += 1
-        elif level == 'error': errors += 1
-    except: pass
-print(f'  Warnings: {warnings}')
-print(f'  Errors:   {errors}')
-" 2>/dev/null || EXIT_CODE=$?
+log() { echo "[iDevOps] $*"; }
+warn() { log "WARN: $*"; }
+ok() { log "OK: $*"; }
 
-  echo "[iDevOps] Running cargo audit..."
-  if ! command -v cargo-audit &>/dev/null; then
-    cargo install cargo-audit 2>/dev/null || true
-  fi
-  cargo audit 2>/dev/null || echo "  WARNING: cargo-audit not available or found issues"
+check_exit() {
+  local code=$1 tool=$2
+  case "$FAIL_ON" in
+    error)   [[ $code -gt 1 ]] && EXIT_CODE=1 ;;
+    warning) [[ $code -gt 0 ]] && EXIT_CODE=1 ;;
+    info)    [[ $code -ne 0 ]] && EXIT_CODE=1 ;;
+    none)    ;;
+  esac
+  if [[ $code -eq 0 ]]; then ok "$tool passed"; else warn "$tool found issues (exit $code)"; fi
+}
 
-  echo "[iDevOps] Running cargo fmt check..."
-  cargo fmt -- --check 2>/dev/null || echo "  WARNING: Formatting issues (run 'cargo fmt' to fix)"
-
-  echo ""
-  if [ "$EXIT_CODE" -ne 0 ]; then
-    if [ "$FAIL_ON" = "critical" ] || [ "$FAIL_ON" = "high" ]; then
-      echo "[iDevOps] FAIL: Clippy errors found (threshold: $FAIL_ON)"
-      exit 1
-    fi
-  fi
-  echo "[iDevOps] PASS: Clippy passed (threshold: $FAIL_ON)"
-else
-  echo "[iDevOps] No Cargo.toml found, skipping"
+if [[ ! -f "Cargo.toml" ]]; then
+  warn "No Cargo.toml found. Skipping Rust lint."
+  exit 0
 fi
+
+# --- Clippy ---
+log "--- Clippy ---"
+if command -v cargo &>/dev/null; then
+  cargo clippy --all-targets --all-features -- -D warnings 2>&1
+  check_exit $? "Clippy"
+else
+  warn "cargo not found. Install Rust toolchain."
+fi
+
+# --- rustfmt ---
+log "--- rustfmt ---"
+if command -v cargo &>/dev/null; then
+  if cargo fmt -- --check 2>&1; then
+    check_exit 0 "rustfmt"
+  else
+    check_exit 1 "rustfmt"
+  fi
+else
+  warn "cargo not found. Skipping rustfmt."
+fi
+
+# --- cargo-deny ---
+log "--- cargo-deny ---"
+if ! command -v cargo-deny &>/dev/null; then
+  log "Installing cargo-deny..."
+  cargo install cargo-deny 2>/dev/null || true
+fi
+if command -v cargo-deny &>/dev/null; then
+  cargo-deny check 2>&1
+  check_exit $? "cargo-deny"
+else
+  warn "cargo-deny installation failed. Skipping."
+fi
+
+log "=== Rust lint complete ==="
+exit $EXIT_CODE

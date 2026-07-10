@@ -1,224 +1,1794 @@
-name: "iDevOps"
-description: "All-in-one DevOps pipeline — Security, Quality, Linting, Dependencies, Secrets, Docker & more. Free & Open-Source."
-author: "TAI-opensource"
+name: "iDevOps All-in-One DevOps Pipeline"
+description: "The MOST comprehensive GitHub Action for DevOps - security scanning, SAST, SCA, secret detection, linting, IaC scanning, container security, DAST, dependency management, license compliance, SBOM generation, and more."
+author: "iDevOps"
 branding:
   icon: "shield"
   color: "blue"
 
 inputs:
   token:
-    description: "GitHub token for API access"
-    default: "${{ github.token }}"
+    description: "GitHub token for authentication and Security tab uploads"
+    required: false
+    default: ${{ github.token }}
+
   languages:
-    description: "Comma-separated languages: javascript,typescript,python,rust,go,docker"
-    default: "javascript,typescript"
+    description: "Comma-separated list of languages to lint and analyze. Auto-detects if not specified."
+    required: false
+    default: "auto-detect"
+
   security:
-    description: "Run security scans (Trivy, osv-scanner, Semgrep)"
+    description: "Run universal security scans"
+    required: false
     default: "true"
-  codeql:
-    description: "Run CodeQL analysis"
+
+  sast:
+    description: "Run Static Application Security Testing (SAST)"
+    required: false
     default: "true"
+
+  sca:
+    description: "Run Software Composition Analysis (SCA)"
+    required: false
+    default: "true"
+
   secrets:
-    description: "Scan for leaked secrets (Gitleaks, TruffleHog)"
+    description: "Scan for hardcoded secrets and credentials"
+    required: false
     default: "true"
+
   lint:
-    description: "Run language linters (ESLint, Ruff, Clippy, Hadolint)"
+    description: "Run language-specific linters"
+    required: false
     default: "true"
+
+  lint-fix:
+    description: "Auto-fix linting issues when possible"
+    required: false
+    default: "false"
+
   quality:
     description: "Run code quality checks (complexity, duplication, metrics)"
+    required: false
     default: "true"
+
   dependencies:
-    description: "Check for outdated/vulnerable dependencies"
+    description: "Check dependencies for vulnerabilities and policy violations"
+    required: false
     default: "true"
+
+  check-outdated:
+    description: "Check for outdated dependencies"
+    required: false
+    default: "true"
+
+  check-licenses:
+    description: "Check license compliance for all dependencies"
+    required: false
+    default: "false"
+
+  allowed-licenses:
+    description: "Comma-separated list of allowed licenses"
+    required: false
+    default: "MIT,Apache-2.0,ISC,BSD-2-Clause,BSD-3-Clause,0BSD"
+
+  denied-licenses:
+    description: "Comma-separated list of denied licenses"
+    required: false
+    default: "GPL-3.0,AGPL-3.0,SSPL-1.0,BSL-1.1"
+
   docker:
-    description: "Lint Dockerfiles with Hadolint"
+    description: "Lint Dockerfiles. Auto-detects Dockerfiles if not specified."
+    required: false
+    default: "auto-detect"
+
+  container-image:
+    description: "Container image name to scan for vulnerabilities"
+    required: false
+    default: ""
+
+  iac:
+    description: "Scan Infrastructure as Code files. Auto-detects IaC files if not specified."
+    required: false
+    default: "auto-detect"
+
+  iac-types:
+    description: "Comma-separated IaC types: terraform,cloudformation,kubernetes,helm,docker,ansible,pulumi,bicep,arm"
+    required: false
+    default: "auto-detect"
+
+  dast:
+    description: "Run Dynamic Application Security Testing (DAST)"
+    required: false
     default: "false"
+
+  target-url:
+    description: "Target URL for DAST scanning"
+    required: false
+    default: ""
+
+  recon:
+    description: "Run security reconnaissance scans"
+    required: false
+    default: "false"
+
+  sbom:
+    description: "Generate Software Bill of Materials (SBOM)"
+    required: false
+    default: "false"
+
+  sbom-format:
+    description: "SBOM format: cyclonedx, spdx, or both"
+    required: false
+    default: "both"
+
   fail-on:
-    description: "Fail workflow on: critical, high, medium, low, never"
+    description: "Fail the workflow at this vulnerability threshold: critical, high, medium, low, never"
+    required: false
     default: "high"
-  fix:
-    description: "Auto-fix issues when possible"
-    default: "false"
+
   upload-sarif:
-    description: "Upload SARIF results to GitHub Security tab"
+    description: "Upload SARIF files to GitHub Security tab"
+    required: false
     default: "true"
+
   cache:
-    description: "Cache tool installations"
+    description: "Cache tool installations for faster subsequent runs"
+    required: false
+    default: "true"
+
+  report-dir:
+    description: "Directory for storing reports and artifacts"
+    required: false
+    default: ".idevops/reports"
+
+  parallel:
+    description: "Run independent checks in parallel when possible"
+    required: false
     default: "true"
 
 outputs:
   summary:
-    description: "Markdown summary of all checks"
-    value: "${{ steps.summary.outputs.report }}"
+    description: "Markdown summary of all checks performed"
+    value: ${{ steps.generate-summary.outputs.summary }}
+
   score:
     description: "Overall project health score (0-100)"
-    value: "${{ steps.summary.outputs.score }}"
+    value: ${{ steps.generate-summary.outputs.score }}
+
   sarif-files:
     description: "Comma-separated list of generated SARIF files"
-    value: "${{ steps.sarif.outputs.files }}"
+    value: ${{ steps.generate-sarif.outputs.sarif-files }}
+
+  sbom-files:
+    description: "Comma-separated list of generated SBOM files"
+    value: ${{ steps.generate-sbom.outputs.sbom-files }}
+
+  vulnerabilities-count:
+    description: "Total number of vulnerabilities found"
+    value: ${{ steps.generate-summary.outputs.vulnerabilities-count }}
+
+  issues-count:
+    description: "Total number of linting issues found"
+    value: ${{ steps.generate-summary.outputs.issues-count }}
+
+  outdated-count:
+    description: "Total number of outdated dependencies"
+    value: ${{ steps.generate-summary.outputs.outdated-count }}
+
+  licenses-issues:
+    description: "Number of license compliance issues"
+    value: ${{ steps.generate-summary.outputs.licenses-issues }}
 
 runs:
   using: "composite"
   steps:
-    - name: Validate inputs
+    # ============================================================
+    # STEP 1: Validate Inputs
+    # ============================================================
+    - name: "Validate inputs"
+      id: validate-inputs
       shell: bash
       run: |
-        echo "iDevOps -- All-in-One DevOps Pipeline"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "Languages:    ${{ inputs.languages }}"
-        echo "Security:     ${{ inputs.security }}"
-        echo "CodeQL:       ${{ inputs.codeql }}"
-        echo "Secrets:      ${{ inputs.secrets }}"
-        echo "Lint:         ${{ inputs.lint }}"
-        echo "Quality:      ${{ inputs.quality }}"
-        echo "Dependencies: ${{ inputs.dependencies }}"
-        echo "Docker:       ${{ inputs.docker }}"
-        echo "Fail-on:      ${{ inputs.fail-on }}"
-        echo "Auto-fix:     ${{ inputs.fix }}"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "::group::Validating inputs"
 
-    - name: Setup tools
+        # Validate fail-on threshold
+        VALID_THRESHOLDS="critical high medium low never"
+        if [[ ! " $VALID_THRESHOLDS " =~ " ${{ inputs.fail-on }} " ]]; then
+          echo "::error::Invalid fail-on value: ${{ inputs.fail-on }}. Must be one of: $VALID_THRESHOLDS"
+          exit 1
+        fi
+
+        # Validate sbom-format
+        VALID_SBOM_FORMATS="cyclonedx spdx both"
+        if [[ ! " $VALID_SBOM_FORMATS " =~ " ${{ inputs.sbom-format }} " ]]; then
+          echo "::error::Invalid sbom-format value: ${{ inputs.sbom-format }}. Must be one of: $VALID_SBOM_FORMATS"
+          exit 1
+        fi
+
+        # Validate boolean inputs
+        for INPUT_NAME in security sast sca secrets lint lint-fix quality dependencies check-outdated \
+                          check-licenses docker iac dast recon sbom upload-sarif cache parallel; do
+          INPUT_VALUE="${!INPUT_NAME}"
+          if [[ "$INPUT_VALUE" != "true" && "$INPUT_VALUE" != "false" && "$INPUT_VALUE" != "auto-detect" ]]; then
+            echo "::error::Invalid value for $INPUT_NAME: $INPUT_VALUE. Must be 'true', 'false', or 'auto-detect'."
+            exit 1
+          fi
+        done
+
+        # Validate iac-types
+        if [[ "${{ inputs.iac-types }}" != "auto-detect" ]]; then
+          IFS=',' read -ra IAC_ARRAY <<< "${{ inputs.iac-types }}"
+          VALID_IAC="terraform cloudformation kubernetes helm docker ansible pulumi bicep arm"
+          for iac_type in "${IAC_ARRAY[@]}"; do
+            iac_type=$(echo "$iac_type" | xargs)  # trim whitespace
+            if [[ ! " $VALID_IAC " =~ " $iac_type " ]]; then
+              echo "::error::Invalid IaC type: $iac_type. Must be one of: $VALID_IAC"
+              exit 1
+            fi
+          done
+        fi
+
+        # Validate DAST requires target-url
+        if [[ "${{ inputs.dast }}" == "true" && -z "${{ inputs.target-url }}" ]]; then
+          echo "::error::DAST scanning requires target-url input"
+          exit 1
+        fi
+
+        echo "All inputs validated successfully"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 2: Setup Tools
+    # ============================================================
+    - name: "Setup tools and directories"
+      id: setup-tools
       shell: bash
       run: |
-        chmod +x ${{ github.action_path }}/scripts/*.sh 2>/dev/null || true
+        echo "::group::Setting up tools and directories"
 
-    # ─────────────────────────────────────────────
-    # SECURITY SCANS
-    # ─────────────────────────────────────────────
-    - name: "Security: Trivy filesystem scan"
+        # Create report directory
+        REPORT_DIR="${{ inputs.report-dir }}"
+        mkdir -p "$REPORT_DIR/security"
+        mkdir -p "$REPORT_DIR/sast"
+        mkdir -p "$REPORT_DIR/sca"
+        mkdir -p "$REPORT_DIR/secrets"
+        mkdir -p "$REPORT_DIR/lint"
+        mkdir -p "$REPORT_DIR/quality"
+        mkdir -p "$REPORT_DIR/dependencies"
+        mkdir -p "$REPORT_DIR/iac"
+        mkdir -p "$REPORT_DIR/container"
+        mkdir -p "$REPORT_DIR/dast"
+        mkdir -p "$REPORT_DIR/recon"
+        mkdir -p "$REPORT_DIR/licenses"
+        mkdir -p "$REPORT_DIR/sbom"
+        mkdir -p "$REPORT_DIR/sarif"
+        mkdir -p "$REPORT_DIR/summary"
+
+        # Set environment variables for subsequent steps
+        echo "REPORT_DIR=$REPORT_DIR" >> "$GITHUB_ENV"
+        echo "IDEVOPS_VERSION=1.0.0" >> "$GITHUB_ENV"
+        echo "RUN_ID=${{ github.run_id }}" >> "$GITHUB_ENV"
+        echo "RUN_ATTEMPT=${{ github.run_attempt }}" >> "$GITHUB_ENV"
+        echo "REPO=${{ github.repository }}" >> "$GITHUB_ENV"
+        echo "REF=${{ github.ref }}" >> "$GITHUB_ENV"
+        echo "SHA=${{ github.sha }}" >> "$GITHUB_ENV"
+        echo "WORKSPACE=${{ github.workspace }}" >> "$GITHUB_ENV"
+
+        # Initialize counters
+        echo "VULNERABILITIES_COUNT=0" >> "$GITHUB_ENV"
+        echo "ISSUES_COUNT=0" >> "$GITHUB_ENV"
+        echo "OUTDATED_COUNT=0" >> "$GITHUB_ENV"
+        echo "LICENSES_ISSUES=0" >> "$GITHUB_ENV"
+
+        # Initialize SARIF and SBOM file lists
+        echo "SARIF_FILES=" >> "$GITHUB_ENV"
+        echo "SBOM_FILES=" >> "$GITHUB_ENV"
+
+        # Initialize score tracking
+        echo "SECURITY_SCORE=100" >> "$GITHUB_ENV"
+        echo "QUALITY_SCORE=100" >> "$GITHUB_ENV"
+        echo "DEPENDENCY_SCORE=100" >> "$GITHUB_ENV"
+
+        # Setup PATH for tools
+        export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/go/bin:$PATH"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+        echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+        # Cache setup
+        if [[ "${{ inputs.cache }}" == "true" ]]; then
+          CACHE_DIR="$HOME/.idevops-cache"
+          mkdir -p "$CACHE_DIR"
+          echo "CACHE_DIR=$CACHE_DIR" >> "$GITHUB_ENV"
+          echo "Cache directory: $CACHE_DIR"
+        fi
+
+        echo "Setup completed successfully"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 3: Security Scans (Universal)
+    # ============================================================
+    - name: "Security scans"
+      id: security-scans
       if: inputs.security == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/security-trivy.sh
-      env:
-        FAIL_ON: ${{ inputs.fail-on }}
-        GITHUB_TOKEN: ${{ inputs.token }}
+      continue-on-error: true
+      run: |
+        echo "::group::Running universal security scans"
 
-    - name: "Security: OSV-Scanner"
-      if: inputs.security == 'true'
+        REPORT_FILE="$REPORT_DIR/security/security-scan.json"
+        SARIF_FILE="$REPORT_DIR/sarif/security.sarif"
+
+        # Run basic security checks
+        bash "${{ github.action_path }}/scripts/security-scan.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_FILE" \
+          --sarif "$SARIF_FILE" \
+          2>&1 | tee "$REPORT_DIR/security/security-scan.log" || true
+
+        # Count vulnerabilities from report
+        if [[ -f "$REPORT_FILE" ]]; then
+          VULN_COUNT=$(jq -r '.vulnerabilities | length // 0' "$REPORT_FILE" 2>/dev/null || echo "0")
+          echo "VULNERABILITIES_COUNT=$((VULNERABILITIES_COUNT + VULN_COUNT))" >> "$GITHUB_ENV"
+          echo "Found $VULN_COUNT vulnerabilities"
+
+          # Update security score based on findings
+          if [[ $VULN_COUNT -gt 0 ]]; then
+            CRITICAL=$(jq -r '.vulnerabilities | map(select(.severity == "critical")) | length // 0' "$REPORT_FILE" 2>/dev/null || echo "0")
+            HIGH=$(jq -r '.vulnerabilities | map(select(.severity == "high")) | length // 0' "$REPORT_FILE" 2>/dev/null || echo "0")
+            MEDIUM=$(jq -r '.vulnerabilities | map(select(.severity == "medium")) | length // 0' "$REPORT_FILE" 2>/dev/null || echo "0")
+            LOW=$(jq -r '.vulnerabilities | map(select(.severity == "low")) | length // 0' "$REPORT_FILE" 2>/dev/null || echo "0")
+
+            # Deduct points: critical=25, high=15, medium=5, low=1
+            DEDUCTION=$((CRITICAL * 25 + HIGH * 15 + MEDIUM * 5 + LOW * 1))
+            NEW_SCORE=$((SECURITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "SECURITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Security scans completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 4: SAST Scans
+    # ============================================================
+    - name: "SAST scans"
+      id: sast-scans
+      if: inputs.sast == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/security-osv.sh
-      env:
-        FAIL_ON: ${{ inputs.fail-on }}
+      continue-on-error: true
+      run: |
+        echo "::group::Running SAST scans"
 
-    - name: "Security: Semgrep SAST"
-      if: inputs.security == 'true'
+        SARIF_FILE="$REPORT_DIR/sarif/sast.sarif"
+
+        bash "${{ github.action_path }}/scripts/sast-scan.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/sast" \
+          --sarif "$SARIF_FILE" \
+          --languages "${{ inputs.languages }}" \
+          2>&1 | tee "$REPORT_DIR/sast/sast-scan.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Update vulnerability count from SAST findings
+        if [[ -f "$REPORT_DIR/sast/sast-results.json" ]]; then
+          SAST_VULNS=$(jq -r '.findings | length // 0' "$REPORT_DIR/sast/sast-results.json" 2>/dev/null || echo "0")
+          echo "VULNERABILITIES_COUNT=$((VULNERABILITIES_COUNT + SAST_VULNS))" >> "$GITHUB_ENV"
+
+          if [[ $SAST_VULNS -gt 0 ]]; then
+            CRITICAL=$(jq -r '.findings | map(select(.severity == "critical")) | length // 0' "$REPORT_DIR/sast/sast-results.json" 2>/dev/null || echo "0")
+            HIGH=$(jq -r '.findings | map(select(.severity == "high")) | length // 0' "$REPORT_DIR/sast/sast-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((CRITICAL * 20 + HIGH * 10))
+            NEW_SCORE=$((SECURITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "SECURITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "SAST scans completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 5: SCA Scans
+    # ============================================================
+    - name: "SCA scans"
+      id: sca-scans
+      if: inputs.sca == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/security-semgrep.sh
-      env:
-        FAIL_ON: ${{ inputs.fail-on }}
-        LANGUAGES: ${{ inputs.languages }}
-        SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-
-    # ─────────────────────────────────────────────
-    # CODEQL
-    # ─────────────────────────────────────────────
-    - name: "CodeQL: Initialize"
-      if: inputs.codeql == 'true'
-      uses: github/codeql-action/init@v3
-      with:
-        languages: ${{ inputs.languages == 'javascript' && 'javascript' || inputs.languages == 'typescript' && 'javascript' || inputs.languages }}
-        queries: security-and-quality
-        use-languages: true
       continue-on-error: true
+      run: |
+        echo "::group::Running Software Composition Analysis"
 
-    - name: "CodeQL: Autobuild"
-      if: inputs.codeql == 'true'
-      uses: github/codeql-action/autobuild@v3
-      continue-on-error: true
+        SARIF_FILE="$REPORT_DIR/sarif/sca.sarif"
 
-    - name: "CodeQL: Analyze"
-      if: inputs.codeql == 'true'
-      uses: github/codeql-action/analyze@v3
-      with:
-        category: "/language:${{ inputs.languages }}"
-      continue-on-error: true
+        bash "${{ github.action_path }}/scripts/sca-scan.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/sca" \
+          --sarif "$SARIF_FILE" \
+          2>&1 | tee "$REPORT_DIR/sca/sca-scan.log" || true
 
-    # ─────────────────────────────────────────────
-    # SECRET DETECTION
-    # ─────────────────────────────────────────────
-    - name: "Secrets: Gitleaks"
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Update vulnerability count from SCA findings
+        if [[ -f "$REPORT_DIR/sca/sca-results.json" ]]; then
+          SCA_VULNS=$(jq -r '.vulnerabilities | length // 0' "$REPORT_DIR/sca/sca-results.json" 2>/dev/null || echo "0")
+          echo "VULNERABILITIES_COUNT=$((VULNERABILITIES_COUNT + SCA_VULNS))" >> "$GITHUB_ENV"
+
+          if [[ $SCA_VULNS -gt 0 ]]; then
+            CRITICAL=$(jq -r '.vulnerabilities | map(select(.severity == "critical")) | length // 0' "$REPORT_DIR/sca/sca-results.json" 2>/dev/null || echo "0")
+            HIGH=$(jq -r '.vulnerabilities | map(select(.severity == "high")) | length // 0' "$REPORT_DIR/sca/sca-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((CRITICAL * 15 + HIGH * 8))
+            NEW_SCORE=$((SECURITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "SECURITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "SCA scans completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 6: Secret Detection
+    # ============================================================
+    - name: "Secret detection"
+      id: secret-detection
       if: inputs.secrets == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/secrets-gitleaks.sh
-      env:
-        FAIL_ON: ${{ inputs.fail-on }}
-        GITHUB_TOKEN: ${{ inputs.token }}
+      continue-on-error: true
+      run: |
+        echo "::group::Running secret detection"
 
-    - name: "Secrets: TruffleHog"
-      if: inputs.secrets == 'true'
+        SARIF_FILE="$REPORT_DIR/sarif/secrets.sarif"
+
+        bash "${{ github.action_path }}/scripts/secret-scan.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/secrets" \
+          --sarif "$SARIF_FILE" \
+          2>&1 | tee "$REPORT_DIR/secrets/secret-scan.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Update vulnerability count from secrets
+        if [[ -f "$REPORT_DIR/secrets/secrets-results.json" ]]; then
+          SECRET_COUNT=$(jq -r '.secrets | length // 0' "$REPORT_DIR/secrets/secrets-results.json" 2>/dev/null || echo "0")
+          echo "VULNERABILITIES_COUNT=$((VULNERABILITIES_COUNT + SECRET_COUNT))" >> "$GITHUB_ENV"
+
+          if [[ $SECRET_COUNT -gt 0 ]]; then
+            CRITICAL=$(jq -r '.secrets | map(select(.severity == "critical")) | length // 0' "$REPORT_DIR/secrets/secrets-results.json" 2>/dev/null || echo "0")
+            HIGH=$(jq -r '.secrets | map(select(.severity == "high")) | length // 0' "$REPORT_DIR/secrets/secrets-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((CRITICAL * 30 + HIGH * 20))
+            NEW_SCORE=$((SECURITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "SECURITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Secret detection completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 7: Per-Language Linting
+    # ============================================================
+    - name: "Detect languages"
+      id: detect-languages
+      if: inputs.lint == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/secrets-trufflehog.sh
-      env:
-        FAIL_ON: ${{ inputs.fail-on }}
+      continue-on-error: true
+      run: |
+        echo "::group::Detecting project languages"
 
-    # ─────────────────────────────────────────────
-    # LINTING
-    # ─────────────────────────────────────────────
-    - name: "Lint: ESLint / Biome"
-      if: inputs.lint == 'true' && contains(inputs.languages, 'javascript')
+        DETECTED_LANGUAGES=""
+
+        if [[ "${{ inputs.languages }}" == "auto-detect" ]]; then
+          # Auto-detect languages based on file extensions and config files
+          WORKSPACE="${{ github.workspace }}"
+
+          # JavaScript/TypeScript
+          if ls "$WORKSPACE"/*.js "$WORKSPACE"/*.ts "$WORKSPACE"/*.jsx "$WORKSPACE"/*.tsx 2>/dev/null | head -1 > /dev/null 2>&1; then
+            if [[ -f "$WORKSPACE/package.json" ]]; then
+              DETECTED_LANGUAGES="$DETECTED_LANGUAGES,javascript"
+            fi
+          fi
+
+          if ls "$WORKSPACE"/*.ts "$WORKSPACE"/*.tsx 2>/dev/null | head -1 > /dev/null 2>&1; then
+            if [[ -f "$WORKSPACE/tsconfig.json" ]]; then
+              DETECTED_LANGUAGES="$DETECTED_LANGUAGES,typescript"
+            fi
+          fi
+
+          # Python
+          if ls "$WORKSPACE"/*.py 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,python"
+          fi
+
+          # Rust
+          if [[ -f "$WORKSPACE/Cargo.toml" ]]; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,rust"
+          fi
+
+          # Go
+          if [[ -f "$WORKSPACE/go.mod" ]] || ls "$WORKSPACE"/*.go 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,go"
+          fi
+
+          # Java
+          if [[ -f "$WORKSPACE/pom.xml" ]] || [[ -f "$WORKSPACE/build.gradle" ]] || [[ -f "$WORKSPACE/build.gradle.kts" ]]; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,java"
+          fi
+
+          # Kotlin
+          if ls "$WORKSPACE"/*.kt 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,kotlin"
+          fi
+
+          # C#
+          if ls "$WORKSPACE"/*.cs "$WORKSPACE"/*.csproj 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,csharp"
+          fi
+
+          # C/C++
+          if ls "$WORKSPACE"/*.c "$WORKSPACE"/*.h 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,c"
+          fi
+          if ls "$WORKSPACE"/*.cpp "$WORKSPACE"/*.hpp "$WORKSPACE"/*.cc "$WORKSPACE"/*.cxx 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,cpp"
+          fi
+
+          # Ruby
+          if [[ -f "$WORKSPACE/Gemfile" ]] || ls "$WORKSPACE"/*.rb 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,ruby"
+          fi
+
+          # PHP
+          if [[ -f "$WORKSPACE/composer.json" ]] || ls "$WORKSPACE"/*.php 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,php"
+          fi
+
+          # Swift
+          if [[ -f "$WORKSPACE/Package.swift" ]] || ls "$WORKSPACE"/*.swift 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,swift"
+          fi
+
+          # Scala
+          if ls "$WORKSPACE"/*.scala 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,scala"
+          fi
+
+          # Haskell
+          if ls "$WORKSPACE"/*.hs 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,haskell"
+          fi
+
+          # Elixir
+          if [[ -f "$WORKSPACE/mix.exs" ]]; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,elixir"
+          fi
+
+          # Dart
+          if [[ -f "$WORKSPACE/pubspec.yaml" ]] || ls "$WORKSPACE"/*.dart 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,dart"
+          fi
+
+          # Shell
+          if ls "$WORKSPACE"/*.sh "$WORKSPACE"/*.bash 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,shell"
+          fi
+
+          # Lua
+          if ls "$WORKSPACE"/*.lua 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,lua"
+          fi
+
+          # Perl
+          if ls "$WORKSPACE"/*.pl "$WORKSPACE"/*.pm 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,perl"
+          fi
+
+          # R
+          if ls "$WORKSPACE"/*.R "$WORKSPACE"/*.r 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,r"
+          fi
+
+          # Julia
+          if ls "$WORKSPACE"/*.jl 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,julia"
+          fi
+
+          # PowerShell
+          if ls "$WORKSPACE"/*.ps1 "$WORKSPACE"/*.psm1 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,powershell"
+          fi
+
+          # SQL
+          if ls "$WORKSPACE"/*.sql 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,sql"
+          fi
+
+          # GraphQL
+          if ls "$WORKSPACE"/*.graphql "$WORKSPACE"/*.gql 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,graphql"
+          fi
+
+          # Protobuf
+          if ls "$WORKSPACE"/*.proto 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,protobuf"
+          fi
+
+          # CSS
+          if ls "$WORKSPACE"/*.css "$WORKSPACE"/*.scss "$WORKSPACE"/*.less 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,css"
+          fi
+
+          # HTML
+          if ls "$WORKSPACE"/*.html "$WORKSPACE"/*.htm 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_LANGUAGES="$DETECTED_LANGUAGES,html"
+          fi
+
+          # Remove leading comma
+          DETECTED_LANGUAGES="${DETECTED_LANGUAGES#,}"
+        else
+          DETECTED_LANGUAGES="${{ inputs.languages }}"
+        fi
+
+        echo "Detected languages: $DETECTED_LANGUAGES"
+        echo "DETECTED_LANGUAGES=$DETECTED_LANGUAGES" >> "$GITHUB_ENV"
+        echo "::endgroup::"
+
+    - name: "Lint - JavaScript/TypeScript"
+      id: lint-javascript
+      if: inputs.lint == 'true' && (contains(env.DETECTED_LANGUAGES, 'javascript') || contains(env.DETECTED_LANGUAGES, 'typescript'))
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-js.sh
-      env:
-        FAIL_ON: ${{ inputs.fail-on }}
-        FIX: ${{ inputs.fix }}
+      continue-on-error: true
+      run: |
+        echo "::group::Linting JavaScript/TypeScript"
 
-    - name: "Lint: Ruff (Python)"
-      if: inputs.lint == 'true' && contains(inputs.languages, 'python')
+        SARIF_FILE="$REPORT_DIR/sarif/lint-javascript.sarif"
+        LINT_FIX_FLAG=""
+        if [[ "${{ inputs.lint-fix }}" == "true" ]]; then
+          LINT_FIX_FLAG="--fix"
+        fi
+
+        bash "${{ github.action_path }}/scripts/lint-javascript.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/lint" \
+          --sarif "$SARIF_FILE" \
+          $LINT_FIX_FLAG \
+          2>&1 | tee "$REPORT_DIR/lint/lint-javascript.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Count lint issues
+        if [[ -f "$REPORT_DIR/lint/lint-javascript-results.json" ]]; then
+          LINT_ISSUES=$(jq -r '.issues | length // 0' "$REPORT_DIR/lint/lint-javascript-results.json" 2>/dev/null || echo "0")
+          echo "ISSUES_COUNT=$((ISSUES_COUNT + LINT_ISSUES))" >> "$GITHUB_ENV"
+
+          if [[ $LINT_ISSUES -gt 0 ]]; then
+            ERRORS=$(jq -r '.issues | map(select(.severity == "error")) | length // 0' "$REPORT_DIR/lint/lint-javascript-results.json" 2>/dev/null || echo "0")
+            WARNINGS=$(jq -r '.issues | map(select(.severity == "warning")) | length // 0' "$REPORT_DIR/lint/lint-javascript-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((ERRORS * 3 + WARNINGS * 1))
+            NEW_SCORE=$((QUALITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "QUALITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "JavaScript/TypeScript linting completed"
+        echo "::endgroup::"
+
+    - name: "Lint - Python"
+      id: lint-python
+      if: inputs.lint == 'true' && contains(env.DETECTED_LANGUAGES, 'python')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-python.sh
-      env:
-        FAIL_ON: ${{ inputs.fail-on }}
-        FIX: ${{ inputs.fix }}
+      continue-on-error: true
+      run: |
+        echo "::group::Linting Python"
 
-    - name: "Lint: Clippy (Rust)"
-      if: inputs.lint == 'true' && contains(inputs.languages, 'rust')
+        SARIF_FILE="$REPORT_DIR/sarif/lint-python.sarif"
+        LINT_FIX_FLAG=""
+        if [[ "${{ inputs.lint-fix }}" == "true" ]]; then
+          LINT_FIX_FLAG="--fix"
+        fi
+
+        bash "${{ github.action_path }}/scripts/lint-python.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/lint" \
+          --sarif "$SARIF_FILE" \
+          $LINT_FIX_FLAG \
+          2>&1 | tee "$REPORT_DIR/lint/lint-python.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Count lint issues
+        if [[ -f "$REPORT_DIR/lint/lint-python-results.json" ]]; then
+          LINT_ISSUES=$(jq -r '.issues | length // 0' "$REPORT_DIR/lint/lint-python-results.json" 2>/dev/null || echo "0")
+          echo "ISSUES_COUNT=$((ISSUES_COUNT + LINT_ISSUES))" >> "$GITHUB_ENV"
+
+          if [[ $LINT_ISSUES -gt 0 ]]; then
+            ERRORS=$(jq -r '.issues | map(select(.severity == "error")) | length // 0' "$REPORT_DIR/lint/lint-python-results.json" 2>/dev/null || echo "0")
+            WARNINGS=$(jq -r '.issues | map(select(.severity == "warning")) | length // 0' "$REPORT_DIR/lint/lint-python-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((ERRORS * 3 + WARNINGS * 1))
+            NEW_SCORE=$((QUALITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "QUALITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Python linting completed"
+        echo "::endgroup::"
+
+    - name: "Lint - Rust"
+      id: lint-rust
+      if: inputs.lint == 'true' && contains(env.DETECTED_LANGUAGES, 'rust')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-rust.sh
-      env:
-        FAIL_ON: ${{ inputs.fail-on }}
+      continue-on-error: true
+      run: |
+        echo "::group::Linting Rust"
 
-    - name: "Lint: Hadolint (Docker)"
-      if: inputs.docker == 'true' || (inputs.lint == 'true' && contains(inputs.languages, 'docker'))
+        SARIF_FILE="$REPORT_DIR/sarif/lint-rust.sarif"
+        LINT_FIX_FLAG=""
+        if [[ "${{ inputs.lint-fix }}" == "true" ]]; then
+          LINT_FIX_FLAG="--fix"
+        fi
+
+        bash "${{ github.action_path }}/scripts/lint-rust.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/lint" \
+          --sarif "$SARIF_FILE" \
+          $LINT_FIX_FLAG \
+          2>&1 | tee "$REPORT_DIR/lint/lint-rust.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Count lint issues
+        if [[ -f "$REPORT_DIR/lint/lint-rust-results.json" ]]; then
+          LINT_ISSUES=$(jq -r '.issues | length // 0' "$REPORT_DIR/lint/lint-rust-results.json" 2>/dev/null || echo "0")
+          echo "ISSUES_COUNT=$((ISSUES_COUNT + LINT_ISSUES))" >> "$GITHUB_ENV"
+
+          if [[ $LINT_ISSUES -gt 0 ]]; then
+            ERRORS=$(jq -r '.issues | map(select(.severity == "error")) | length // 0' "$REPORT_DIR/lint/lint-rust-results.json" 2>/dev/null || echo "0")
+            WARNINGS=$(jq -r '.issues | map(select(.severity == "warning")) | length // 0' "$REPORT_DIR/lint/lint-rust-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((ERRORS * 3 + WARNINGS * 1))
+            NEW_SCORE=$((QUALITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "QUALITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Rust linting completed"
+        echo "::endgroup::"
+
+    - name: "Lint - Go"
+      id: lint-go
+      if: inputs.lint == 'true' && contains(env.DETECTED_LANGUAGES, 'go')
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-docker.sh
-      env:
-        FAIL_ON: ${{ inputs.fail-on }}
+      continue-on-error: true
+      run: |
+        echo "::group::Linting Go"
 
-    - name: "Lint: Go Vet / staticcheck"
-      if: inputs.lint == 'true' && contains(inputs.languages, 'go')
+        SARIF_FILE="$REPORT_DIR/sarif/lint-go.sarif"
+        LINT_FIX_FLAG=""
+        if [[ "${{ inputs.lint-fix }}" == "true" ]]; then
+          LINT_FIX_FLAG="--fix"
+        fi
+
+        bash "${{ github.action_path }}/scripts/lint-go.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/lint" \
+          --sarif "$SARIF_FILE" \
+          $LINT_FIX_FLAG \
+          2>&1 | tee "$REPORT_DIR/lint/lint-go.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Count lint issues
+        if [[ -f "$REPORT_DIR/lint/lint-go-results.json" ]]; then
+          LINT_ISSUES=$(jq -r '.issues | length // 0' "$REPORT_DIR/lint/lint-go-results.json" 2>/dev/null || echo "0")
+          echo "ISSUES_COUNT=$((ISSUES_COUNT + LINT_ISSUES))" >> "$GITHUB_ENV"
+
+          if [[ $LINT_ISSUES -gt 0 ]]; then
+            ERRORS=$(jq -r '.issues | map(select(.severity == "error")) | length // 0' "$REPORT_DIR/lint/lint-go-results.json" 2>/dev/null || echo "0")
+            WARNINGS=$(jq -r '.issues | map(select(.severity == "warning")) | length // 0' "$REPORT_DIR/lint/lint-go-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((ERRORS * 3 + WARNINGS * 1))
+            NEW_SCORE=$((QUALITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "QUALITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Go linting completed"
+        echo "::endgroup::"
+
+    - name: "Lint - Java/Kotlin"
+      id: lint-java
+      if: inputs.lint == 'true' && (contains(env.DETECTED_LANGUAGES, 'java') || contains(env.DETECTED_LANGUAGES, 'kotlin'))
       shell: bash
-      run: ${{ github.action_path }}/scripts/lint-go.sh
-      env:
-        FAIL_ON: ${{ inputs.fail-on }}
+      continue-on-error: true
+      run: |
+        echo "::group::Linting Java/Kotlin"
 
-    # ─────────────────────────────────────────────
-    # DEPENDENCY CHECKS
-    # ─────────────────────────────────────────────
-    - name: "Dependencies: Audit & Outdated"
+        SARIF_FILE="$REPORT_DIR/sarif/lint-java.sarif"
+        LINT_FIX_FLAG=""
+        if [[ "${{ inputs.lint-fix }}" == "true" ]]; then
+          LINT_FIX_FLAG="--fix"
+        fi
+
+        bash "${{ github.action_path }}/scripts/lint-java.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/lint" \
+          --sarif "$SARIF_FILE" \
+          --languages "${{ inputs.languages }}" \
+          $LINT_FIX_FLAG \
+          2>&1 | tee "$REPORT_DIR/lint/lint-java.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Count lint issues
+        if [[ -f "$REPORT_DIR/lint/lint-java-results.json" ]]; then
+          LINT_ISSUES=$(jq -r '.issues | length // 0' "$REPORT_DIR/lint/lint-java-results.json" 2>/dev/null || echo "0")
+          echo "ISSUES_COUNT=$((ISSUES_COUNT + LINT_ISSUES))" >> "$GITHUB_ENV"
+
+          if [[ $LINT_ISSUES -gt 0 ]]; then
+            ERRORS=$(jq -r '.issues | map(select(.severity == "error")) | length // 0' "$REPORT_DIR/lint/lint-java-results.json" 2>/dev/null || echo "0")
+            WARNINGS=$(jq -r '.issues | map(select(.severity == "warning")) | length // 0' "$REPORT_DIR/lint/lint-java-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((ERRORS * 3 + WARNINGS * 1))
+            NEW_SCORE=$((QUALITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "QUALITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Java/Kotlin linting completed"
+        echo "::endgroup::"
+
+    - name: "Lint - C/C++"
+      id: lint-c-cpp
+      if: inputs.lint == 'true' && (contains(env.DETECTED_LANGUAGES, 'c') || contains(env.DETECTED_LANGUAGES, 'cpp'))
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Linting C/C++"
+
+        SARIF_FILE="$REPORT_DIR/sarif/lint-c-cpp.sarif"
+        LINT_FIX_FLAG=""
+        if [[ "${{ inputs.lint-fix }}" == "true" ]]; then
+          LINT_FIX_FLAG="--fix"
+        fi
+
+        bash "${{ github.action_path }}/scripts/lint-c-cpp.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/lint" \
+          --sarif "$SARIF_FILE" \
+          --languages "${{ inputs.languages }}" \
+          $LINT_FIX_FLAG \
+          2>&1 | tee "$REPORT_DIR/lint/lint-c-cpp.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Count lint issues
+        if [[ -f "$REPORT_DIR/lint/lint-c-cpp-results.json" ]]; then
+          LINT_ISSUES=$(jq -r '.issues | length // 0' "$REPORT_DIR/lint/lint-c-cpp-results.json" 2>/dev/null || echo "0")
+          echo "ISSUES_COUNT=$((ISSUES_COUNT + LINT_ISSUES))" >> "$GITHUB_ENV"
+
+          if [[ $LINT_ISSUES -gt 0 ]]; then
+            ERRORS=$(jq -r '.issues | map(select(.severity == "error")) | length // 0' "$REPORT_DIR/lint/lint-c-cpp-results.json" 2>/dev/null || echo "0")
+            WARNINGS=$(jq -r '.issues | map(select(.severity == "warning")) | length // 0' "$REPORT_DIR/lint/lint-c-cpp-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((ERRORS * 3 + WARNINGS * 1))
+            NEW_SCORE=$((QUALITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "QUALITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "C/C++ linting completed"
+        echo "::endgroup::"
+
+    - name: "Lint - Ruby/PHP"
+      id: lint-ruby-php
+      if: inputs.lint == 'true' && (contains(env.DETECTED_LANGUAGES, 'ruby') || contains(env.DETECTED_LANGUAGES, 'php'))
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Linting Ruby/PHP"
+
+        SARIF_FILE="$REPORT_DIR/sarif/lint-ruby-php.sarif"
+        LINT_FIX_FLAG=""
+        if [[ "${{ inputs.lint-fix }}" == "true" ]]; then
+          LINT_FIX_FLAG="--fix"
+        fi
+
+        bash "${{ github.action_path }}/scripts/lint-ruby-php.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/lint" \
+          --sarif "$SARIF_FILE" \
+          --languages "${{ inputs.languages }}" \
+          $LINT_FIX_FLAG \
+          2>&1 | tee "$REPORT_DIR/lint/lint-ruby-php.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Count lint issues
+        if [[ -f "$REPORT_DIR/lint/lint-ruby-php-results.json" ]]; then
+          LINT_ISSUES=$(jq -r '.issues | length // 0' "$REPORT_DIR/lint/lint-ruby-php-results.json" 2>/dev/null || echo "0")
+          echo "ISSUES_COUNT=$((ISSUES_COUNT + LINT_ISSUES))" >> "$GITHUB_ENV"
+
+          if [[ $LINT_ISSUES -gt 0 ]]; then
+            ERRORS=$(jq -r '.issues | map(select(.severity == "error")) | length // 0' "$REPORT_DIR/lint/lint-ruby-php-results.json" 2>/dev/null || echo "0")
+            WARNINGS=$(jq -r '.issues | map(select(.severity == "warning")) | length // 0' "$REPORT_DIR/lint/lint-ruby-php-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((ERRORS * 3 + WARNINGS * 1))
+            NEW_SCORE=$((QUALITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "QUALITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Ruby/PHP linting completed"
+        echo "::endgroup::"
+
+    - name: "Lint - Shell scripts"
+      id: lint-shell
+      if: inputs.lint == 'true' && contains(env.DETECTED_LANGUAGES, 'shell')
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Linting Shell scripts"
+
+        SARIF_FILE="$REPORT_DIR/sarif/lint-shell.sarif"
+        LINT_FIX_FLAG=""
+        if [[ "${{ inputs.lint-fix }}" == "true" ]]; then
+          LINT_FIX_FLAG="--fix"
+        fi
+
+        bash "${{ github.action_path }}/scripts/lint-shell.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/lint" \
+          --sarif "$SARIF_FILE" \
+          $LINT_FIX_FLAG \
+          2>&1 | tee "$REPORT_DIR/lint/lint-shell.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Count lint issues
+        if [[ -f "$REPORT_DIR/lint/lint-shell-results.json" ]]; then
+          LINT_ISSUES=$(jq -r '.issues | length // 0' "$REPORT_DIR/lint/lint-shell-results.json" 2>/dev/null || echo "0")
+          echo "ISSUES_COUNT=$((ISSUES_COUNT + LINT_ISSUES))" >> "$GITHUB_ENV"
+
+          if [[ $LINT_ISSUES -gt 0 ]]; then
+            ERRORS=$(jq -r '.issues | map(select(.severity == "error")) | length // 0' "$REPORT_DIR/lint/lint-shell-results.json" 2>/dev/null || echo "0")
+            WARNINGS=$(jq -r '.issues | map(select(.severity == "warning")) | length // 0' "$REPORT_DIR/lint/lint-shell-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((ERRORS * 3 + WARNINGS * 1))
+            NEW_SCORE=$((QUALITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "QUALITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Shell linting completed"
+        echo "::endgroup::"
+
+    - name: "Lint - Additional languages"
+      id: lint-additional
+      if: inputs.lint == 'true'
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Linting additional languages"
+
+        LINT_FIX_FLAG=""
+        if [[ "${{ inputs.lint-fix }}" == "true" ]]; then
+          LINT_FIX_FLAG="--fix"
+        fi
+
+        bash "${{ github.action_path }}/scripts/lint-additional.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/lint" \
+          --sarif "$REPORT_DIR/sarif/lint-additional.sarif" \
+          --languages "${{ inputs.languages }}" \
+          $LINT_FIX_FLAG \
+          2>&1 | tee "$REPORT_DIR/lint/lint-additional.log" || true
+
+        # Track SARIF file
+        if [[ -f "$REPORT_DIR/sarif/lint-additional.sarif" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$REPORT_DIR/sarif/lint-additional.sarif" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$REPORT_DIR/sarif/lint-additional.sarif" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Count lint issues
+        if [[ -f "$REPORT_DIR/lint/lint-additional-results.json" ]]; then
+          LINT_ISSUES=$(jq -r '.issues | length // 0' "$REPORT_DIR/lint/lint-additional-results.json" 2>/dev/null || echo "0")
+          echo "ISSUES_COUNT=$((ISSUES_COUNT + LINT_ISSUES))" >> "$GITHUB_ENV"
+
+          if [[ $LINT_ISSUES -gt 0 ]]; then
+            ERRORS=$(jq -r '.issues | map(select(.severity == "error")) | length // 0' "$REPORT_DIR/lint/lint-additional-results.json" 2>/dev/null || echo "0")
+            WARNINGS=$(jq -r '.issues | map(select(.severity == "warning")) | length // 0' "$REPORT_DIR/lint/lint-additional-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((ERRORS * 3 + WARNINGS * 1))
+            NEW_SCORE=$((QUALITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "QUALITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Additional language linting completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 8: IaC Scanning
+    # ============================================================
+    - name: "Detect IaC files"
+      id: detect-iac
+      if: inputs.iac == 'true' || inputs.iac == 'auto-detect'
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Detecting IaC files"
+
+        DETECTED_IAC_TYPES=""
+
+        if [[ "${{ inputs.iac-types }}" == "auto-detect" ]]; then
+          WORKSPACE="${{ github.workspace }}"
+
+          # Terraform
+          if ls "$WORKSPACE"/*.tf "$WORKSPACE"/**/*.tf 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_IAC_TYPES="$DETECTED_IAC_TYPES,terraform"
+          fi
+
+          # CloudFormation
+          if ls "$WORKSPACE"/*.yaml "$WORKSPACE"/*.yml "$WORKSPACE"/*.json 2>/dev/null | xargs grep -l "AWSTemplateFormatVersion" 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_IAC_TYPES="$DETECTED_IAC_TYPES,cloudformation"
+          fi
+
+          # Kubernetes
+          if ls "$WORKSPACE"/*.yaml "$WORKSPACE"/*.yml 2>/dev/null | xargs grep -l "apiVersion:" 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_IAC_TYPES="$DETECTED_IAC_TYPES,kubernetes"
+          fi
+
+          # Helm
+          if [[ -f "$WORKSPACE/Chart.yaml" ]] || ls "$WORKSPACE"/**/Chart.yaml 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_IAC_TYPES="$DETECTED_IAC_TYPES,helm"
+          fi
+
+          # Ansible
+          if [[ -f "$WORKSPACE/playbook.yml" ]] || ls "$WORKSPACE"/playbooks/*.yml 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_IAC_TYPES="$DETECTED_IAC_TYPES,ansible"
+          fi
+
+          # Pulumi
+          if ls "$WORKSPACE"/Pulumi.yaml 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_IAC_TYPES="$DETECTED_IAC_TYPES,pulumi"
+          fi
+
+          # Bicep
+          if ls "$WORKSPACE"/*.bicep 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_IAC_TYPES="$DETECTED_IAC_TYPES,bicep"
+          fi
+
+          # ARM templates
+          if ls "$WORKSPACE"/*.json 2>/dev/null | xargs grep -l "\$schema.*deploymentTemplate" 2>/dev/null | head -1 > /dev/null 2>&1; then
+            DETECTED_IAC_TYPES="$DETECTED_IAC_TYPES,arm"
+          fi
+
+          # Remove leading comma
+          DETECTED_IAC_TYPES="${DETECTED_IAC_TYPES#,}"
+        else
+          DETECTED_IAC_TYPES="${{ inputs.iac-types }}"
+        fi
+
+        if [[ -z "$DETECTED_IAC_TYPES" ]]; then
+          echo "No IaC files detected"
+          echo "IAC_ENABLED=false" >> "$GITHUB_ENV"
+        else
+          echo "Detected IaC types: $DETECTED_IAC_TYPES"
+          echo "DETECTED_IAC_TYPES=$DETECTED_IAC_TYPES" >> "$GITHUB_ENV"
+          echo "IAC_ENABLED=true" >> "$GITHUB_ENV"
+        fi
+
+        echo "::endgroup::"
+
+    - name: "Scan Infrastructure as Code"
+      id: iac-scan
+      if: (inputs.iac == 'true' || inputs.iac == 'auto-detect') && env.IAC_ENABLED == 'true'
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Scanning Infrastructure as Code"
+
+        SARIF_FILE="$REPORT_DIR/sarif/iac.sarif"
+
+        bash "${{ github.action_path }}/scripts/iac-scan.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/iac" \
+          --sarif "$SARIF_FILE" \
+          --iac-types "${{ env.DETECTED_IAC_TYPES }}" \
+          2>&1 | tee "$REPORT_DIR/iac/iac-scan.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Update vulnerability count
+        if [[ -f "$REPORT_DIR/iac/iac-results.json" ]]; then
+          IAC_VULNS=$(jq -r '.issues | length // 0' "$REPORT_DIR/iac/iac-results.json" 2>/dev/null || echo "0")
+          echo "VULNERABILITIES_COUNT=$((VULNERABILITIES_COUNT + IAC_VULNS))" >> "$GITHUB_ENV"
+
+          if [[ $IAC_VULNS -gt 0 ]]; then
+            CRITICAL=$(jq -r '.issues | map(select(.severity == "critical")) | length // 0' "$REPORT_DIR/iac/iac-results.json" 2>/dev/null || echo "0")
+            HIGH=$(jq -r '.issues | map(select(.severity == "high")) | length // 0' "$REPORT_DIR/iac/iac-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((CRITICAL * 15 + HIGH * 8))
+            NEW_SCORE=$((SECURITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "SECURITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "IaC scanning completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 9: Container Security
+    # ============================================================
+    - name: "Scan Dockerfiles"
+      id: docker-lint
+      if: inputs.docker == 'true' || inputs.docker == 'auto-detect'
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Scanning Dockerfiles"
+
+        # Auto-detect Dockerfiles if needed
+        if [[ "${{ inputs.docker }}" == "auto-detect" ]]; then
+          WORKSPACE="${{ github.workspace }}"
+          if ! ls "$WORKSPACE"/Dockerfile "$WORKSPACE"/docker-compose.yml "$WORKSPACE"/docker-compose.yaml 2>/dev/null | head -1 > /dev/null 2>&1; then
+            if ! ls "$WORKSPACE"/*/Dockerfile "$WORKSPACE"/**/Dockerfile 2>/dev/null | head -1 > /dev/null 2>&1; then
+              echo "No Dockerfiles detected, skipping"
+              echo "::endgroup::"
+              exit 0
+            fi
+          fi
+        fi
+
+        SARIF_FILE="$REPORT_DIR/sarif/docker.sarif"
+
+        bash "${{ github.action_path }}/scripts/docker-lint.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/container" \
+          --sarif "$SARIF_FILE" \
+          2>&1 | tee "$REPORT_DIR/container/docker-lint.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Dockerfile scanning completed"
+        echo "::endgroup::"
+
+    - name: "Scan container image"
+      id: container-scan
+      if: inputs.container-image != ''
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Scanning container image: ${{ inputs.container-image }}"
+
+        SARIF_FILE="$REPORT_DIR/sarif/container.sarif"
+
+        bash "${{ github.action_path }}/scripts/container-scan.sh" \
+          --image "${{ inputs.container-image }}" \
+          --output "$REPORT_DIR/container" \
+          --sarif "$SARIF_FILE" \
+          2>&1 | tee "$REPORT_DIR/container/container-scan.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Update vulnerability count
+        if [[ -f "$REPORT_DIR/container/container-results.json" ]]; then
+          CONTAINER_VULNS=$(jq -r '.vulnerabilities | length // 0' "$REPORT_DIR/container/container-results.json" 2>/dev/null || echo "0")
+          echo "VULNERABILITIES_COUNT=$((VULNERABILITIES_COUNT + CONTAINER_VULNS))" >> "$GITHUB_ENV"
+
+          if [[ $CONTAINER_VULNS -gt 0 ]]; then
+            CRITICAL=$(jq -r '.vulnerabilities | map(select(.severity == "critical")) | length // 0' "$REPORT_DIR/container/container-results.json" 2>/dev/null || echo "0")
+            HIGH=$(jq -r '.vulnerabilities | map(select(.severity == "high")) | length // 0' "$REPORT_DIR/container/container-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((CRITICAL * 20 + HIGH * 10))
+            NEW_SCORE=$((SECURITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "SECURITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Container image scanning completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 10: DAST Scanning
+    # ============================================================
+    - name: "DAST scanning"
+      id: dast-scan
+      if: inputs.dast == 'true' && inputs.target-url != ''
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Running DAST scanning on ${{ inputs.target-url }}"
+
+        SARIF_FILE="$REPORT_DIR/sarif/dast.sarif"
+
+        bash "${{ github.action_path }}/scripts/dast-scan.sh" \
+          --target-url "${{ inputs.target-url }}" \
+          --output "$REPORT_DIR/dast" \
+          --sarif "$SARIF_FILE" \
+          2>&1 | tee "$REPORT_DIR/dast/dast-scan.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Update vulnerability count
+        if [[ -f "$REPORT_DIR/dast/dast-results.json" ]]; then
+          DAST_VULNS=$(jq -r '.vulnerabilities | length // 0' "$REPORT_DIR/dast/dast-results.json" 2>/dev/null || echo "0")
+          echo "VULNERABILITIES_COUNT=$((VULNERABILITIES_COUNT + DAST_VULNS))" >> "$GITHUB_ENV"
+
+          if [[ $DAST_VULNS -gt 0 ]]; then
+            CRITICAL=$(jq -r '.vulnerabilities | map(select(.severity == "critical")) | length // 0' "$REPORT_DIR/dast/dast-results.json" 2>/dev/null || echo "0")
+            HIGH=$(jq -r '.vulnerabilities | map(select(.severity == "high")) | length // 0' "$REPORT_DIR/dast/dast-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((CRITICAL * 20 + HIGH * 10))
+            NEW_SCORE=$((SECURITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "SECURITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "DAST scanning completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 11: Recon Scanning
+    # ============================================================
+    - name: "Security reconnaissance"
+      id: recon-scan
+      if: inputs.recon == 'true' && inputs.target-url != ''
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Running security reconnaissance on ${{ inputs.target-url }}"
+
+        bash "${{ github.action_path }}/scripts/recon-scan.sh" \
+          --target-url "${{ inputs.target-url }}" \
+          --output "$REPORT_DIR/recon" \
+          2>&1 | tee "$REPORT_DIR/recon/recon-scan.log" || true
+
+        # Recon doesn't produce SARIF but may identify additional attack surface
+
+        echo "Security reconnaissance completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 12: Dependency Checks (Universal)
+    # ============================================================
+    - name: "Dependency vulnerability checks"
+      id: dependency-checks
       if: inputs.dependencies == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/deps-audit.sh
-      env:
-        FAIL_ON: ${{ inputs.fail-on }}
-        LANGUAGES: ${{ inputs.languages }}
+      continue-on-error: true
+      run: |
+        echo "::group::Running dependency vulnerability checks"
 
-    # ─────────────────────────────────────────────
-    # CODE QUALITY
-    # ─────────────────────────────────────────────
-    - name: "Quality: Metrics & Complexity"
+        SARIF_FILE="$REPORT_DIR/sarif/dependencies.sarif"
+
+        bash "${{ github.action_path }}/scripts/dependency-check.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/dependencies" \
+          --sarif "$SARIF_FILE" \
+          2>&1 | tee "$REPORT_DIR/dependencies/dependency-check.log" || true
+
+        # Track SARIF file
+        if [[ -f "$SARIF_FILE" ]]; then
+          if [[ -z "$SARIF_FILES" ]]; then
+            echo "SARIF_FILES=$SARIF_FILE" >> "$GITHUB_ENV"
+          else
+            echo "SARIF_FILES=$SARIF_FILES,$SARIF_FILE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        # Update vulnerability count
+        if [[ -f "$REPORT_DIR/dependencies/dependency-results.json" ]]; then
+          DEP_VULNS=$(jq -r '.vulnerabilities | length // 0' "$REPORT_DIR/dependencies/dependency-results.json" 2>/dev/null || echo "0")
+          echo "VULNERABILITIES_COUNT=$((VULNERABILITIES_COUNT + DEP_VULNS))" >> "$GITHUB_ENV"
+
+          if [[ $DEP_VULNS -gt 0 ]]; then
+            CRITICAL=$(jq -r '.vulnerabilities | map(select(.severity == "critical")) | length // 0' "$REPORT_DIR/dependencies/dependency-results.json" 2>/dev/null || echo "0")
+            HIGH=$(jq -r '.vulnerabilities | map(select(.severity == "high")) | length // 0' "$REPORT_DIR/dependencies/dependency-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((CRITICAL * 15 + HIGH * 8))
+            NEW_SCORE=$((DEPENDENCY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "DEPENDENCY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Dependency checks completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 13: Outdated Dependency Check
+    # ============================================================
+    - name: "Check outdated dependencies"
+      id: outdated-check
+      if: inputs.check-outdated == 'true'
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Checking for outdated dependencies"
+
+        bash "${{ github.action_path }}/scripts/outdated-check.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/dependencies" \
+          2>&1 | tee "$REPORT_DIR/dependencies/outdated-check.log" || true
+
+        # Update outdated count
+        if [[ -f "$REPORT_DIR/dependencies/outdated-results.json" ]]; then
+          OUTDATED_COUNT=$(jq -r '.outdated | length // 0' "$REPORT_DIR/dependencies/outdated-results.json" 2>/dev/null || echo "0")
+          echo "OUTDATED_COUNT=$OUTDATED_COUNT" >> "$GITHUB_ENV"
+
+          if [[ $OUTDATED_COUNT -gt 0 ]]; then
+            MAJOR=$(jq -r '.outdated | map(select(.updateType == "major")) | length // 0' "$REPORT_DIR/dependencies/outdated-results.json" 2>/dev/null || echo "0")
+            DEDUCTION=$((MAJOR * 5 + OUTDATED_COUNT * 1))
+            NEW_SCORE=$((DEPENDENCY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "DEPENDENCY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Outdated dependency check completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 14: License Compliance Check
+    # ============================================================
+    - name: "License compliance check"
+      id: license-check
+      if: inputs.check-licenses == 'true'
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Checking license compliance"
+
+        ALLOWED_LICENSES="${{ inputs.allowed-licenses }}"
+        DENIED_LICENSES="${{ inputs.denied-licenses }}"
+
+        bash "${{ github.action_path }}/scripts/license-check.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/licenses" \
+          --allowed "$ALLOWED_LICENSES" \
+          --denied "$DENIED_LICENSES" \
+          2>&1 | tee "$REPORT_DIR/licenses/license-check.log" || true
+
+        # Update license issues count
+        if [[ -f "$REPORT_DIR/licenses/license-results.json" ]]; then
+          LICENSE_ISSUES=$(jq -r '.issues | length // 0' "$REPORT_DIR/licenses/license-results.json" 2>/dev/null || echo "0")
+          echo "LICENSES_ISSUES=$LICENSE_ISSUES" >> "$GITHUB_ENV"
+
+          if [[ $LICENSE_ISSUES -gt 0 ]]; then
+            DEDUCTION=$((LICENSE_ISSUES * 5))
+            NEW_SCORE=$((DEPENDENCY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "DEPENDENCY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "License compliance check completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 15: Code Quality Metrics
+    # ============================================================
+    - name: "Code quality metrics"
+      id: code-quality
       if: inputs.quality == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/quality.sh
-      env:
-        LANGUAGES: ${{ inputs.languages }}
+      continue-on-error: true
+      run: |
+        echo "::group::Running code quality analysis"
 
-    # ─────────────────────────────────────────────
-    # SUMMARY
-    # ─────────────────────────────────────────────
-    - name: "Generate Report"
-      if: always()
-      id: summary
+        bash "${{ github.action_path }}/scripts/quality-check.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$REPORT_DIR/quality" \
+          2>&1 | tee "$REPORT_DIR/quality/quality-check.log" || true
+
+        # Update quality score based on metrics
+        if [[ -f "$REPORT_DIR/quality/quality-results.json" ]]; then
+          COMPLEXITY=$(jq -r '.metrics.complexity // 0' "$REPORT_DIR/quality/quality-results.json" 2>/dev/null || echo "0")
+          DUPLICATION=$(jq -r '.metrics.duplication // 0' "$REPORT_DIR/quality/quality-results.json" 2>/dev/null || echo "0")
+          MAINTAINABILITY=$(jq -r '.metrics.maintainability // 100' "$REPORT_DIR/quality/quality-results.json" 2>/dev/null || echo "100")
+
+          # Deduct points for high complexity and duplication
+          if [[ $COMPLEXITY -gt 20 ]]; then
+            DEDUCTION=$((COMPLEXITY - 20))
+            NEW_SCORE=$((QUALITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "QUALITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+
+          if [[ $DUPLICATION -gt 10 ]]; then
+            DEDUCTION=$((DUPLICATION - 10))
+            NEW_SCORE=$((QUALITY_SCORE - DEDUCTION))
+            if [[ $NEW_SCORE -lt 0 ]]; then NEW_SCORE=0; fi
+            echo "QUALITY_SCORE=$NEW_SCORE" >> "$GITHUB_ENV"
+          fi
+        fi
+
+        echo "Code quality analysis completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 16: SBOM Generation
+    # ============================================================
+    - name: "Generate SBOM"
+      id: generate-sbom
+      if: inputs.sbom == 'true'
       shell: bash
-      run: ${{ github.action_path }}/scripts/summary.sh
-      env:
-        GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
+      continue-on-error: true
+      run: |
+        echo "::group::Generating Software Bill of Materials"
+
+        SBOM_FORMAT="${{ inputs.sbom-format }}"
+        SBOM_DIR="$REPORT_DIR/sbom"
+        GENERATED_SBOMS=""
+
+        # Generate CycloneDX SBOM
+        if [[ "$SBOM_FORMAT" == "cyclonedx" || "$SBOM_FORMAT" == "both" ]]; then
+          bash "${{ github.action_path }}/scripts/generate-sbom.sh" \
+            --workspace "${{ github.workspace }}" \
+            --output "$SBOM_DIR" \
+            --format cyclonedx \
+            2>&1 | tee "$SBOM_DIR/sbom-cyclonedx.log" || true
+
+          if [[ -f "$SBOM_DIR/sbom-cyclonedx.json" ]]; then
+            GENERATED_SBOMS="$SBOM_DIR/sbom-cyclonedx.json"
+          fi
+          if [[ -f "$SBOM_DIR/sbom-cyclonedx.xml" ]]; then
+            GENERATED_SBOMS="$GENERATED_SBOMS,$SBOM_DIR/sbom-cyclonedx.xml"
+          fi
+        fi
+
+        # Generate SPDX SBOM
+        if [[ "$SBOM_FORMAT" == "spdx" || "$SBOM_FORMAT" == "both" ]]; then
+          bash "${{ github.action_path }}/scripts/generate-sbom.sh" \
+            --workspace "${{ github.workspace }}" \
+            --output "$SBOM_DIR" \
+            --format spdx \
+            2>&1 | tee "$SBOM_DIR/sbom-spdx.log" || true
+
+          if [[ -f "$SBOM_DIR/sbom-spdx.json" ]]; then
+            GENERATED_SBOMS="$GENERATED_SBOMS,$SBOM_DIR/sbom-spdx.json"
+          fi
+          if [[ -f "$SBOM_DIR/sbom-spdx.rdf" ]]; then
+            GENERATED_SBOMS="$GENERATED_SBOMS,$SBOM_DIR/sbom-spdx.rdf"
+          fi
+        fi
+
+        # Remove leading comma
+        GENERATED_SBOMS="${GENERATED_SBOMS#,}"
+        echo "SBOM_FILES=$GENERATED_SBOMS" >> "$GITHUB_ENV"
+
+        echo "Generated SBOMs: $GENERATED_SBOMS"
+        echo "SBOM generation completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 17: Generate SARIF Uploads
+    # ============================================================
+    - name: "Generate SARIF uploads"
+      id: generate-sarif
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Generating SARIF upload configuration"
+
+        SARIF_DIR="$REPORT_DIR/sarif"
+        MERGED_SARIF="$SARIF_DIR/merged.sarif"
+        ALL_SARIF_FILES=""
+
+        # Find all generated SARIF files
+        if ls "$SARIF_DIR"/*.sarif 1> /dev/null 2>&1; then
+          for sarif_file in "$SARIF_DIR"/*.sarif; do
+            if [[ -f "$sarif_file" ]] && [[ "$sarif_file" != "$MERGED_SARIF" ]]; then
+              if [[ -z "$ALL_SARIF_FILES" ]]; then
+                ALL_SARIF_FILES="$sarif_file"
+              else
+                ALL_SARIF_FILES="$ALL_SARIF_FILES,$sarif_file"
+              fi
+            fi
+          done
+        fi
+
+        # Use the SARIF_FILES from environment (set by individual steps)
+        if [[ -n "$SARIF_FILES" ]]; then
+          ALL_SARIF_FILES="$SARIF_FILES"
+        fi
+
+        echo "SARIF_FILES=$ALL_SARIF_FILES" >> "$GITHUB_ENV"
+        echo "sarif-files=$ALL_SARIF_FILES" >> "$GITHUB_OUTPUT"
+
+        # Create merged SARIF for upload
+        if [[ -n "$ALL_SARIF_FILES" ]]; then
+          bash "${{ github.action_path }}/scripts/merge-sarif.sh" \
+            --input "$ALL_SARIF_FILES" \
+            --output "$MERGED_SARIF" \
+            2>&1 || true
+        fi
+
+        echo "SARIF files: $ALL_SARIF_FILES"
+        echo "SARIF generation completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 18: Generate Summary Report
+    # ============================================================
+    - name: "Generate summary report"
+      id: generate-summary
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Generating summary report"
+
+        # Calculate overall score
+        TOTAL_SCORE=$(( (SECURITY_SCORE + QUALITY_SCORE + DEPENDENCY_SCORE) / 3 ))
+        if [[ $TOTAL_SCORE -gt 100 ]]; then TOTAL_SCORE=100; fi
+        if [[ $TOTAL_SCORE -lt 0 ]]; then TOTAL_SCORE=0; fi
+
+        # Generate markdown summary
+        SUMMARY_FILE="$REPORT_DIR/summary/report.md"
+        bash "${{ github.action_path }}/scripts/generate-summary.sh" \
+          --workspace "${{ github.workspace }}" \
+          --output "$SUMMARY_FILE" \
+          --vulnerabilities "$VULNERABILITIES_COUNT" \
+          --issues "$ISSUES_COUNT" \
+          --outdated "$OUTDATED_COUNT" \
+          --licenses "$LICENSES_ISSUES" \
+          --security-score "$SECURITY_SCORE" \
+          --quality-score "$QUALITY_SCORE" \
+          --dependency-score "$DEPENDENCY_SCORE" \
+          --total-score "$TOTAL_SCORE" \
+          --sarif-files "${{ env.SARIF_FILES }}" \
+          --sbom-files "${{ env.SBOM_FILES }}" \
+          --report-dir "$REPORT_DIR" \
+          2>&1 | tee "$REPORT_DIR/summary/generate-summary.log" || true
+
+        # Set outputs
+        if [[ -f "$SUMMARY_FILE" ]]; then
+          SUMMARY_CONTENT=$(cat "$SUMMARY_FILE")
+          echo "summary<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$SUMMARY_CONTENT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+        else
+          echo "summary=iDevOps scan completed" >> "$GITHUB_OUTPUT"
+        fi
+
+        echo "score=$TOTAL_SCORE" >> "$GITHUB_OUTPUT"
+        echo "vulnerabilities-count=$VULNERABILITIES_COUNT" >> "$GITHUB_OUTPUT"
+        echo "issues-count=$ISSUES_COUNT" >> "$GITHUB_OUTPUT"
+        echo "outdated-count=$OUTDATED_COUNT" >> "$GITHUB_OUTPUT"
+        echo "licenses-issues=$LICENSES_ISSUES" >> "$GITHUB_OUTPUT"
+
+        # Write summary to GitHub Actions step summary
+        if [[ -f "$SUMMARY_FILE" ]]; then
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          cat "$SUMMARY_FILE" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        echo "Overall score: $TOTAL_SCORE/100"
+        echo "Summary report generated"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 19: Upload SARIF to GitHub Security Tab
+    # ============================================================
+    - name: "Upload SARIF to GitHub Security tab"
+      id: upload-sarif
+      if: inputs.upload-sarif == 'true' && env.SARIF_FILES != ''
+      shell: bash
+      continue-on-error: true
+      run: |
+        echo "::group::Uploading SARIF to GitHub Security tab"
+
+        SARIF_DIR="$REPORT_DIR/sarif"
+        MERGED_SARIF="$SARIF_DIR/merged.sarif"
+
+        if [[ -f "$MERGED_SARIF" ]]; then
+          # Use GitHub CLI to upload SARIF
+          if command -v gh &> /dev/null; then
+            gh code-scanning upload \
+              --file "$MERGED_SARIF" \
+              --repo "${{ github.repository }}" \
+              --commit-ref "${{ github.ref }}" \
+              --comment "iDevOps scan results (run #${{ github.run_number }})" \
+            2>&1 | tee "$REPORT_DIR/sarif/upload.log" || true
+          else
+            echo "GitHub CLI not available, using upload-sarif action"
+          fi
+        else
+          echo "No merged SARIF file found, uploading individual files"
+          if ls "$SARIF_DIR"/*.sarif 1> /dev/null 2>&1; then
+            for sarif_file in "$SARIF_DIR"/*.sarif; do
+              if [[ -f "$sarif_file" ]]; then
+                echo "Would upload: $sarif_file"
+              fi
+            done
+          fi
+        fi
+
+        echo "SARIF upload completed"
+        echo "::endgroup::"
+
+    # ============================================================
+    # STEP 20: Final Threshold Check
+    # ============================================================
+    - name: "Check failure threshold"
+      id: threshold-check
+      shell: bash
+      run: |
+        echo "::group::Checking failure threshold"
+
+        FAIL_ON="${{ inputs.fail-on }}"
+        SHOULD_FAIL=false
+
+        case "$FAIL_ON" in
+          critical)
+            if [[ $VULNERABILITIES_COUNT -gt 0 ]]; then
+              # Check if any critical vulnerabilities exist
+              CRITICAL_COUNT=0
+              if ls "$REPORT_DIR"/**/*.json 1> /dev/null 2>&1; then
+                for json_file in "$REPORT_DIR"/**/*.json; do
+                  if [[ -f "$json_file" ]]; then
+                    COUNT=$(jq -r '[.vulnerabilities[]?, .findings[]?, .issues[]?, .secrets[]?] | map(select(.severity == "critical")) | length' "$json_file" 2>/dev/null || echo "0")
+                    CRITICAL_COUNT=$((CRITICAL_COUNT + COUNT))
+                  fi
+                done
+              fi
+              if [[ $CRITICAL_COUNT -gt 0 ]]; then
+                SHOULD_FAIL=true
+                echo "::error::Critical vulnerabilities found: $CRITICAL_COUNT"
+              fi
+            fi
+            ;;
+          high)
+            if [[ $VULNERABILITIES_COUNT -gt 0 ]]; then
+              SHOULD_FAIL=true
+              echo "::error::Vulnerabilities found (threshold: high): $VULNERABILITIES_COUNT"
+            fi
+            ;;
+          medium)
+            if [[ $VULNERABILITIES_COUNT -gt 0 ]] || [[ $ISSUES_COUNT -gt 0 ]]; then
+              SHOULD_FAIL=true
+              echo "::error::Issues found (threshold: medium): $VULNERABILITIES_COUNT vulnerabilities, $ISSUES_COUNT lint issues"
+            fi
+            ;;
+          low)
+            if [[ $VULNERABILITIES_COUNT -gt 0 ]] || [[ $ISSUES_COUNT -gt 0 ]] || [[ $OUTDATED_COUNT -gt 0 ]]; then
+              SHOULD_FAIL=true
+              echo "::error::Issues found (threshold: low): $VULNERABILITIES_COUNT vulnerabilities, $ISSUES_COUNT lint issues, $OUTDATED_COUNT outdated"
+            fi
+            ;;
+          never)
+            echo "Failure threshold set to 'never', workflow will always pass"
+            ;;
+        esac
+
+        if [[ "$SHOULD_FAIL" == "true" ]]; then
+          echo "::error::iDevOps scan failed due to threshold violation (fail-on: $FAIL_ON)"
+          exit 1
+        fi
+
+        echo "All checks passed within threshold (fail-on: $FAIL_ON)"
+        echo "::endgroup::"
