@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# iDevOps — Code Quality Metrics
+# iDevOps - Code Quality Metrics
 set -euo pipefail
 
 LANGUAGES="${LANGUAGES:-javascript}"
 
-echo "📊 Code Quality — Metrics & Analysis"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "[iDevOps] Code Quality -- Metrics & Analysis"
+echo "--------------------------------------------"
 
-# ── File Statistics ──
+# File Statistics
 echo ""
-echo "📁 Project Statistics:"
+echo "[iDevOps] Project Statistics:"
 
 # Count files by language
 JS_FILES=$(find . -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" 2>/dev/null | grep -v node_modules | grep -v .next | grep -v dist | wc -l)
@@ -24,9 +24,9 @@ echo "  Rust:                 $RS_FILES files"
 echo "  Go:                   $GO_FILES files"
 echo "  Dockerfiles:          $DOCKER_FILES files"
 
-# ── Code Metrics ──
+# Code Metrics
 echo ""
-echo "📏 Code Metrics:"
+echo "[iDevOps] Code Metrics:"
 
 # Total lines of code
 TOTAL_LINES=$(find . \( -name "*.js" -o -name "*.jsx" -o -name "*.ts" -o -name "*.tsx" -o -name "*.py" -o -name "*.rs" -o -name "*.go" \) \
@@ -43,19 +43,19 @@ echo "  Average file size: ${AVG_SIZE}KB"
 # Large files (>500 lines)
 LARGE_FILES=$(find . \( -name "*.js" -o -name "*.ts" -o -name "*.py" -o -name "*.rs" -o -name "*.go" \) \
   ! -path "*/node_modules/*" ! -path "*/.next/*" ! -path "*/dist/*" ! -path "*/target/*" ! -path "*/vendor/*" \
-  -exec sh -c 'lines=$(wc -l < "$1"); if [ "$lines" -gt 500 ]; then echo "  ⚠️  $1 ($lines lines)"; fi' _ {} \; 2>/dev/null)
+  -exec sh -c 'lines=$(wc -l < "$1"); if [ "$lines" -gt 500 ]; then echo "  WARNING: $1 ($lines lines)"; fi' _ {} \; 2>/dev/null)
 
 if [ -n "$LARGE_FILES" ]; then
   echo ""
   echo "  Large files (>500 lines):"
   echo "$LARGE_FILES"
 else
-  echo "  ✅ No large files (>500 lines)"
+  echo "  OK: No large files (>500 lines)"
 fi
 
-# ── Documentation ──
+# Documentation
 echo ""
-echo "📝 Documentation:"
+echo "[iDevOps] Documentation:"
 README_EXISTS="false"
 for f in README.md README.rst README.txt README; do
   if [ -f "$f" ]; then
@@ -78,13 +78,13 @@ for f in CONTRIBUTING.md CONTRIBUTING; do
   fi
 done
 
-echo "  README:     $([ "$README_EXISTS" = "true" ] && echo "✅" || echo "❌ missing")"
-echo "  LICENSE:    $([ "$LICENSE_EXISTS" = "true" ] && echo "✅" || echo "❌ missing")"
-echo "  CONTRIBUTING: $([ "$CONTRIBUTING_EXISTS" = "true" ] && echo "✅" || echo "⚠️  missing")"
+echo "  README:     $([ "$README_EXISTS" = "true" ] && echo "OK" || echo "MISSING")"
+echo "  LICENSE:    $([ "$LICENSE_EXISTS" = "true" ] && echo "OK" || echo "MISSING")"
+echo "  CONTRIBUTING: $([ "$CONTRIBUTING_EXISTS" = "true" ] && echo "OK" || echo "MISSING")"
 
-# ── CI/CD ──
+# CI/CD
 echo ""
-echo "⚙️  CI/CD:"
+echo "[iDevOps] CI/CD:"
 CI_EXISTS="false"
 for f in .github/workflows/*.yml .github/workflows/*.yaml; do
   if [ -f "$f" ]; then
@@ -92,9 +92,9 @@ for f in .github/workflows/*.yml .github/workflows/*.yaml; do
     break
   fi
 done
-echo "  GitHub Actions: $([ "$CI_EXISTS" = "true" ] && echo "✅" || echo "❌ missing")"
+echo "  GitHub Actions: $([ "$CI_EXISTS" = "true" ] && echo "OK" || echo "MISSING")"
 
-# ── Score Calculation ──
+# Score Calculation
 SCORE=100
 [ "$README_EXISTS" = "false" ] && SCORE=$((SCORE - 10))
 [ "$LICENSE_EXISTS" = "false" ] && SCORE=$((SCORE - 15))
@@ -104,5 +104,5 @@ SCORE=100
 [ -n "$LARGE_FILES" ] && SCORE=$((SCORE - 5))
 
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🏆 Quality Score: $SCORE/100"
+echo "------------------------------------------------"
+echo "[iDevOps] Quality Score: $SCORE/100"

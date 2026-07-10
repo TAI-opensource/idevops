@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# iDevOps — Final Summary Report
+# iDevOps - Final Summary Report
 set -euo pipefail
 
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  📋 iDevOps — Final Report"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "=========================================================="
+echo "  [iDevOps] Final Report"
+echo "=========================================================="
 echo ""
 
 # Count SARIF results
@@ -31,14 +31,14 @@ for sarif in *-results.sarif *-lint.sarif semgrep*.sarif gitleaks-results.sarif 
   MEDIUM=$((MEDIUM + S_MEDIUM))
 
   if [ "$TOOL_TOTAL" -gt 0 ]; then
-    echo "  🔍 $TOOL: $TOOL_TOTAL findings (C:$S_CRITICAL H:$S_HIGH M:$S_MEDIUM)"
+    echo "  $TOOL: $TOOL_TOTAL findings (C:$S_CRITICAL H:$S_HIGH M:$S_MEDIUM)"
   fi
 done
 
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  📊 Summary"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "=========================================================="
+echo "  [iDevOps] Summary"
+echo "=========================================================="
 echo ""
 echo "  Total findings: $TOTAL_FINDINGS"
 echo "  Critical:       $CRITICAL"
@@ -54,7 +54,7 @@ SCORE=$((SCORE - HIGH * 3))
 SCORE=$((SCORE - MEDIUM * 1))
 [ "$SCORE" -lt 0 ] && SCORE=0
 
-echo "  🏆 Health Score: $SCORE/100"
+echo "  Health Score: $SCORE/100"
 echo ""
 
 # List SARIF files for upload
@@ -69,11 +69,11 @@ for f in *-results.sarif *-lint.sarif semgrep*.sarif gitleaks-results.sarif hado
 done
 
 if [ -n "$SARIF_FILES" ]; then
-  echo "  📁 SARIF files: $SARIF_FILES"
+  echo "  SARIF files: $SARIF_FILES"
 fi
 
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "=========================================================="
 
 # Set outputs for GitHub Actions
 if [ -n "${GITHUB_OUTPUT:-}" ]; then

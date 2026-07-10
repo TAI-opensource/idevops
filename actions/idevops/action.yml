@@ -63,7 +63,7 @@ runs:
     - name: Validate inputs
       shell: bash
       run: |
-        echo "🔍 iDevOps — All-in-One DevOps Pipeline"
+        echo "iDevOps -- All-in-One DevOps Pipeline"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "Languages:    ${{ inputs.languages }}"
         echo "Security:     ${{ inputs.security }}"
@@ -85,7 +85,7 @@ runs:
     # ─────────────────────────────────────────────
     # SECURITY SCANS
     # ─────────────────────────────────────────────
-    - name: "🛡️ Security: Trivy filesystem scan"
+    - name: "Security: Trivy filesystem scan"
       if: inputs.security == 'true'
       shell: bash
       run: ${{ github.action_path }}/scripts/security-trivy.sh
@@ -93,14 +93,14 @@ runs:
         FAIL_ON: ${{ inputs.fail-on }}
         GITHUB_TOKEN: ${{ inputs.token }}
 
-    - name: "🛡️ Security: OSV-Scanner"
+    - name: "Security: OSV-Scanner"
       if: inputs.security == 'true'
       shell: bash
       run: ${{ github.action_path }}/scripts/security-osv.sh
       env:
         FAIL_ON: ${{ inputs.fail-on }}
 
-    - name: "🛡️ Security: Semgrep SAST"
+    - name: "Security: Semgrep SAST"
       if: inputs.security == 'true'
       shell: bash
       run: ${{ github.action_path }}/scripts/security-semgrep.sh
@@ -112,7 +112,7 @@ runs:
     # ─────────────────────────────────────────────
     # CODEQL
     # ─────────────────────────────────────────────
-    - name: "🔐 CodeQL: Initialize"
+    - name: "CodeQL: Initialize"
       if: inputs.codeql == 'true'
       uses: github/codeql-action/init@v3
       with:
@@ -121,12 +121,12 @@ runs:
         use-languages: true
       continue-on-error: true
 
-    - name: "🔐 CodeQL: Autobuild"
+    - name: "CodeQL: Autobuild"
       if: inputs.codeql == 'true'
       uses: github/codeql-action/autobuild@v3
       continue-on-error: true
 
-    - name: "🔐 CodeQL: Analyze"
+    - name: "CodeQL: Analyze"
       if: inputs.codeql == 'true'
       uses: github/codeql-action/analyze@v3
       with:
@@ -136,7 +136,7 @@ runs:
     # ─────────────────────────────────────────────
     # SECRET DETECTION
     # ─────────────────────────────────────────────
-    - name: "🔑 Secrets: Gitleaks"
+    - name: "Secrets: Gitleaks"
       if: inputs.secrets == 'true'
       shell: bash
       run: ${{ github.action_path }}/scripts/secrets-gitleaks.sh
@@ -144,7 +144,7 @@ runs:
         FAIL_ON: ${{ inputs.fail-on }}
         GITHUB_TOKEN: ${{ inputs.token }}
 
-    - name: "🔑 Secrets: TruffleHog"
+    - name: "Secrets: TruffleHog"
       if: inputs.secrets == 'true'
       shell: bash
       run: ${{ github.action_path }}/scripts/secrets-trufflehog.sh
@@ -154,7 +154,7 @@ runs:
     # ─────────────────────────────────────────────
     # LINTING
     # ─────────────────────────────────────────────
-    - name: "🧹 Lint: ESLint / Biome"
+    - name: "Lint: ESLint / Biome"
       if: inputs.lint == 'true' && contains(inputs.languages, 'javascript')
       shell: bash
       run: ${{ github.action_path }}/scripts/lint-js.sh
@@ -162,7 +162,7 @@ runs:
         FAIL_ON: ${{ inputs.fail-on }}
         FIX: ${{ inputs.fix }}
 
-    - name: "🧹 Lint: Ruff (Python)"
+    - name: "Lint: Ruff (Python)"
       if: inputs.lint == 'true' && contains(inputs.languages, 'python')
       shell: bash
       run: ${{ github.action_path }}/scripts/lint-python.sh
@@ -170,21 +170,21 @@ runs:
         FAIL_ON: ${{ inputs.fail-on }}
         FIX: ${{ inputs.fix }}
 
-    - name: "🧹 Lint: Clippy (Rust)"
+    - name: "Lint: Clippy (Rust)"
       if: inputs.lint == 'true' && contains(inputs.languages, 'rust')
       shell: bash
       run: ${{ github.action_path }}/scripts/lint-rust.sh
       env:
         FAIL_ON: ${{ inputs.fail-on }}
 
-    - name: "🧹 Lint: Hadolint (Docker)"
+    - name: "Lint: Hadolint (Docker)"
       if: inputs.docker == 'true' || (inputs.lint == 'true' && contains(inputs.languages, 'docker'))
       shell: bash
       run: ${{ github.action_path }}/scripts/lint-docker.sh
       env:
         FAIL_ON: ${{ inputs.fail-on }}
 
-    - name: "🧹 Lint: Go Vet / staticcheck"
+    - name: "Lint: Go Vet / staticcheck"
       if: inputs.lint == 'true' && contains(inputs.languages, 'go')
       shell: bash
       run: ${{ github.action_path }}/scripts/lint-go.sh
@@ -194,7 +194,7 @@ runs:
     # ─────────────────────────────────────────────
     # DEPENDENCY CHECKS
     # ─────────────────────────────────────────────
-    - name: "📦 Dependencies: Audit & Outdated"
+    - name: "Dependencies: Audit & Outdated"
       if: inputs.dependencies == 'true'
       shell: bash
       run: ${{ github.action_path }}/scripts/deps-audit.sh
@@ -205,7 +205,7 @@ runs:
     # ─────────────────────────────────────────────
     # CODE QUALITY
     # ─────────────────────────────────────────────
-    - name: "📊 Quality: Metrics & Complexity"
+    - name: "Quality: Metrics & Complexity"
       if: inputs.quality == 'true'
       shell: bash
       run: ${{ github.action_path }}/scripts/quality.sh
@@ -215,7 +215,7 @@ runs:
     # ─────────────────────────────────────────────
     # SUMMARY
     # ─────────────────────────────────────────────
-    - name: "📋 Generate Report"
+    - name: "Generate Report"
       if: always()
       id: summary
       shell: bash

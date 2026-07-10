@@ -1,26 +1,26 @@
-# 🛡️ iDevOps — All-in-One DevOps Pipeline
+# iDevOps -- All-in-One DevOps Pipeline
 
 > **Free & Open-Source** GitHub Action that replaces 12+ separate tools with a single, unified pipeline.
 
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-iDevOps-blue?logo=github)](https://github.com/marketplace/actions/idevops)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## 🔧 What's Included
+## What's Included
 
-| Category                | Tools Replaced                        | What It Does                    |
-| ----------------------- | ------------------------------------- | ------------------------------- |
-| 🛡️ **Security**         | Trivy, osv-scanner, Semgrep           | Vulnerability & SAST scanning   |
-| 🔐 **Code Analysis**    | CodeQL                                | Deep semantic code analysis     |
-| 🔑 **Secret Detection** | Gitleaks, TruffleHog                  | Find leaked secrets & API keys  |
-| 🧹 **Linting**          | ESLint, Biome, Ruff, Clippy, Hadolint | Multi-language linting          |
-| 📦 **Dependencies**     | Snyk, npm audit, pip-audit            | Vulnerability & outdated checks |
-| 📊 **Quality**          | SonarQube Community                   | Metrics, complexity, docs check |
-| 🐳 **Docker**           | Hadolint                              | Dockerfile best practices       |
-| 🐍 **Python**           | Ruff, Flake8, Black                   | Lint + format in one tool       |
-| 🦀 **Rust**             | Clippy, cargo-audit                   | Lint + security audit           |
-| 🐹 **Go**               | go vet, staticcheck, govulncheck      | Lint + vulnerability check      |
+| Category             | Tools Replaced                        | What It Does                    |
+| -------------------- | ------------------------------------- | ------------------------------- |
+| **Security**         | Trivy, osv-scanner, Semgrep           | Vulnerability & SAST scanning   |
+| **Code Analysis**    | CodeQL                                | Deep semantic code analysis     |
+| **Secret Detection** | Gitleaks, TruffleHog                  | Find leaked secrets & API keys  |
+| **Linting**          | ESLint, Biome, Ruff, Clippy, Hadolint | Multi-language linting          |
+| **Dependencies**     | Snyk, npm audit, pip-audit            | Vulnerability & outdated checks |
+| **Quality**          | SonarQube Community                   | Metrics, complexity, docs check |
+| **Docker**           | Hadolint                              | Dockerfile best practices       |
+| **Python**           | Ruff, Flake8, Black                   | Lint + format in one tool       |
+| **Rust**             | Clippy, cargo-audit                   | Lint + security audit           |
+| **Go**               | go vet, staticcheck, govulncheck      | Lint + vulnerability check      |
 
-## ⚡ Quick Start
+## Quick Start
 
 ```yaml
 # .github/workflows/ci.yml
@@ -40,7 +40,7 @@ jobs:
 
 That's it. **One step. One config. All tools.**
 
-## 🎯 Usage Examples
+## Usage Examples
 
 ### JavaScript/TypeScript Project
 
@@ -112,7 +112,7 @@ That's it. **One step. One config. All tools.**
     fail-on: "critical"
 ```
 
-## 📥 Inputs
+## Inputs
 
 | Input          | Description                                                    | Default                 |
 | -------------- | -------------------------------------------------------------- | ----------------------- |
@@ -128,7 +128,7 @@ That's it. **One step. One config. All tools.**
 | `fix`          | Auto-fix issues when possible                                  | `false`                 |
 | `upload-sarif` | Upload results to GitHub Security tab                          | `true`                  |
 
-## 📤 Outputs
+## Outputs
 
 | Output        | Description                            |
 | ------------- | -------------------------------------- |
@@ -136,19 +136,19 @@ That's it. **One step. One config. All tools.**
 | `score`       | Overall project health score (0-100)   |
 | `sarif-files` | Comma-separated SARIF files for upload |
 
-## 📊 Example Output
+## Example Output
 
 ```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  📋 iDevOps — Final Report
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+==========================================================
+  [iDevOps] Final Report
+==========================================================
 
-  🔍 trivy-results: 2 findings (C:0 H:1 M:1)
-  🔍 eslint-results: 5 findings (C:0 H:0 M:5)
+  trivy-results: 2 findings (C:0 H:1 M:1)
+  eslint-results: 5 findings (C:0 H:0 M:5)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  📊 Summary
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+==========================================================
+  [iDevOps] Summary
+==========================================================
 
   Total findings: 7
   Critical:       0
@@ -156,11 +156,11 @@ That's it. **One step. One config. All tools.**
   Medium:         6
   Low:            0
 
-  🏆 Health Score: 87/100
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Health Score: 87/100
+==========================================================
 ```
 
-## 🔒 SARIF Integration
+## SARIF Integration
 
 iDevOps uploads results to GitHub's Security tab via SARIF format:
 
@@ -176,7 +176,7 @@ iDevOps uploads results to GitHub's Security tab via SARIF format:
     sarif_files: ${{ steps.idevops.outputs.sarif-files }}
 ```
 
-## ⚙️ Advanced Configuration
+## Advanced Configuration
 
 ### Custom Severity Thresholds
 
@@ -221,24 +221,24 @@ iDevOps uploads results to GitHub's Security tab via SARIF format:
     SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 ```
 
-## 🤝 Contributing
+## Contributing
 
 Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## 📄 License
+## License
 
-MIT — use it anywhere, no restrictions.
+MIT -- use it anywhere, no restrictions.
 
-## 🙏 Credits
+## Credits
 
 Built on top of these amazing open-source tools:
 
-- [Trivy](https://github.com/aquasecurity/trivy) — Aqua Security
-- [OSV-Scanner](https://github.com/google/osv-scanner) — Google
-- [Semgrep](https://github.com/semgrep/semgrep) — Semgrep Inc.
-- [CodeQL](https://github.com/github/codeql) — GitHub
-- [Gitleaks](https://github.com/gitleaks/gitleaks) — Gitleaks
-- [TruffleHog](https://github.com/trufflesecurity/trufflehog) — Truffle Security
-- [Ruff](https://github.com/astral-sh/ruff) — Astral
-- [Hadolint](https://github.com/hadolint/hadolint) — Hadolint
-- [Clippy](https://github.com/rust-lang/rust-clippy) — Rust Lang
+- [Trivy](https://github.com/aquasecurity/trivy) -- Aqua Security
+- [OSV-Scanner](https://github.com/google/osv-scanner) -- Google
+- [Semgrep](https://github.com/semgrep/semgrep) -- Semgrep Inc.
+- [CodeQL](https://github.com/github/codeql) -- GitHub
+- [Gitleaks](https://github.com/gitleaks/gitleaks) -- Gitleaks
+- [TruffleHog](https://github.com/trufflesecurity/trufflehog) -- Truffle Security
+- [Ruff](https://github.com/astral-sh/ruff) -- Astral
+- [Hadolint](https://github.com/hadolint/hadolint) -- Hadolint
+- [Clippy](https://github.com/rust-lang/rust-clippy) -- Rust Lang

@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# iDevOps — JavaScript/TypeScript Linting (ESLint + Biome)
+# iDevOps - JavaScript/TypeScript Linting (ESLint + Biome)
 set -euo pipefail
 
 FAIL_ON="${FAIL_ON:-high}"
 FIX="${FIX:-false}"
 
-echo "🧹 ESLint / Biome — JavaScript & TypeScript Linting"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "[iDevOps] ESLint / Biome -- JavaScript & TypeScript Linting"
+echo "-----------------------------------------------------------"
 
 EXIT_CODE=0
 
 # Try ESLint first
 if [ -f "node_modules/.bin/eslint" ] || command -v eslint &>/dev/null; then
-  echo "🔍 Running ESLint..."
+  echo "[iDevOps] Running ESLint..."
   ESLINT_CMD="npx eslint"
   if [ "$FIX" = "true" ]; then
     ESLINT_CMD="$ESLINT_CMD --fix"
@@ -20,14 +20,14 @@ if [ -f "node_modules/.bin/eslint" ] || command -v eslint &>/dev/null; then
   $ESLINT_CMD . --format sarif --output-file eslint-results.sarif 2>/dev/null || EXIT_CODE=$?
   echo "  ESLint exit code: $EXIT_CODE"
 elif [ -f "package.json" ]; then
-  echo "📦 Installing ESLint..."
+  echo "[iDevOps] Installing ESLint..."
   npm install --no-save eslint @eslint/js typescript-eslint 2>/dev/null && \
     npx eslint . --format sarif --output-file eslint-results.sarif 2>/dev/null || EXIT_CODE=$?
 fi
 
 # Try Biome as alternative/extra
 if [ -f "biome.json" ] || [ -f "biome.jsonc" ]; then
-  echo "🔍 Running Biome..."
+  echo "[iDevOps] Running Biome..."
   if command -v biome &>/dev/null || [ -f "node_modules/.bin/biome" ]; then
     biome check . --write 2>/dev/null || true
     echo "  Biome check complete"
@@ -41,12 +41,12 @@ if [ -f "eslint-results.sarif" ]; then
 fi
 
 echo ""
-echo "📊 ESLint findings: $FINDINGS"
+echo "[iDevOps] ESLint findings: $FINDINGS"
 
 if [ "$EXIT_CODE" -ne 0 ]; then
   if [ "$FAIL_ON" = "critical" ] || [ "$FAIL_ON" = "high" ]; then
-    echo "❌ Failing: lint errors found (threshold: $FAIL_ON)"
+    echo "[iDevOps] FAIL: lint errors found (threshold: $FAIL_ON)"
     exit 1
   fi
 fi
-echo "✅ ESLint passed (threshold: $FAIL_ON)"
+echo "[iDevOps] PASS: ESLint passed (threshold: $FAIL_ON)"

@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# iDevOps — Semgrep SAST
+# iDevOps - Semgrep SAST
 set -euo pipefail
 
 FAIL_ON="${FAIL_ON:-high}"
 LANGUAGES="${LANGUAGES:-javascript}"
 
-echo "🛡️  Semgrep — Static Application Security Testing"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "[iDevOps] Semgrep -- Static Application Security Testing"
+echo "--------------------------------------------------------"
 
 # Install Semgrep if not present
 if ! command -v semgrep &>/dev/null; then
-  echo "📦 Installing Semgrep..."
+  echo "[iDevOps] Installing Semgrep..."
   pip3 install semgrep 2>/dev/null || pip install semgrep 2>/dev/null \
     || (curl -sSL https://semgrep.dev/install.sh | sh)
 fi
@@ -38,7 +38,7 @@ if [ -z "$RULESETS" ]; then
   RULESETS="p/default"
 fi
 
-echo "🔍 Running Semgrep with rulesets: $RULESETS"
+echo "[iDevOps] Running Semgrep with rulesets: $RULESETS"
 semgrep scan \
   --config auto \
   --sarif --output semgrep-results.sarif \
@@ -48,7 +48,7 @@ semgrep scan \
 
 # Fallback: also run with explicit rulesets
 if [ ! -s "semgrep-results.sarif" ] || [ "$(wc -c < semgrep-results.sarif 2>/dev/null || echo 0)" -lt 50 ]; then
-  echo "🔄 Retrying with explicit rulesets..."
+  echo "[iDevOps] Retrying with explicit rulesets..."
   for ruleset in $RULESETS; do
     semgrep scan \
       --config "$ruleset" \
@@ -68,12 +68,12 @@ for f in semgrep*.sarif; do
 done
 
 echo ""
-echo "📊 Semgrep findings: $FINDINGS"
+echo "[iDevOps] Semgrep findings: $FINDINGS"
 
 if [ "$FAIL_ON" = "critical" ] || [ "$FAIL_ON" = "high" ]; then
   if [ "$FINDINGS" -gt 0 ]; then
-    echo "❌ Failing: $FINDINGS findings (threshold: $FAIL_ON)"
+    echo "[iDevOps] FAIL: $FINDINGS findings (threshold: $FAIL_ON)"
     exit 1
   fi
 fi
-echo "✅ Semgrep passed (threshold: $FAIL_ON)"
+echo "[iDevOps] PASS: Semgrep passed (threshold: $FAIL_ON)"
